@@ -1,0 +1,21 @@
+[package]
+name = "anweb"
+version = "0.1.0"
+authors = ["Aleksey Astakhov <madmonkey@mail.ru>"]
+edition = "2018"
+
+[dependencies]
+mio = "0.6"
+slab = "0.4.2"
+num_cpus = "1"
+sha-1 = "0.8.2"
+base64 = "0.11.0"
+rustls = "0.16.0"
+percent-encoding = "2.1.0"
+deflate = { version = "0.8.3", features = ["gzip"] }
+chrono = "0.4.11"
+md5 = "0.7.0"
+
+[dev-dependencies]
+rand = "0.7"
+threadpool = "1.7.1"

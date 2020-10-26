@@ -1,0 +1,9 @@
+[package]
+name = "simple"
+version = "0.0.1"
+authors = ["Aleksey Astakhov <madmonkey@mail.ru>"]
+edition = "2018"
+
+[profile.release]
+lto = true
+opt-level = 'z'
