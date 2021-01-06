@@ -80,7 +80,7 @@ impl Connection {
         if http {
             let content_callback = self.client.inner.content_callback.lock()
                 .unwrap_or_else(|err| { unreachable!(err) });
-            let parse_request = content_callback.is_some();
+            let parse_request = content_callback.is_none();
             drop(content_callback); // unlock
 
             if parse_request {
