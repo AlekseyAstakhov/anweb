@@ -1,5 +1,5 @@
-use crate::connected;
-use crate::connected::Connected;
+use crate::connection;
+use crate::connection::Connection;
 use crate::server::{Error, Event, Settings};
 use crate::tcp_client::TcpClient;
 
@@ -14,7 +14,7 @@ use std::time::Duration;
 /// Single threaded TCP server designed for use as an HTTP server.
 pub struct Worker {
     /// Connected clients.
-    pub connections: Slab<Connected>,
+    pub connections: Slab<Connection>,
 
     /// Connection counter. Used to create clients identifiers. Atomic in order to identify users on several such servers.
     pub connections_counter: Arc<AtomicU64>,
@@ -57,7 +57,7 @@ impl Worker {
             tcp_listener,
             settings: Settings {
                 tls_config: None,
-                clients_settings: connected::Settings::default(),
+                clients_settings: connection::Settings::default(),
             },
             stopper,
             http_date_string,
@@ -126,7 +126,7 @@ impl Worker {
 
                         match register_result {
                             Ok(()) => {
-                                self.connections.insert(Connected::new(client.clone()));
+                                self.connections.insert(Connection::new(client.clone()));
                             }
                             Err(err) => {
                                 event_callback(Event::Error(Error::RegisterError(err)));

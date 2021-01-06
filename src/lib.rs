@@ -15,6 +15,6 @@ pub mod server;
 pub mod static_files;
 pub mod websocket;
 pub mod worker;
-mod connected;
+mod connection;
 mod request_parser;
 mod content_loader;

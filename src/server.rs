@@ -1,4 +1,4 @@
-use crate::connected;
+use crate::connection;
 use crate::tcp_client::TcpClient;
 use crate::worker::Worker;
 
@@ -49,7 +49,7 @@ pub struct Settings {
     /// Configuration of TLS (rustls).
     pub tls_config: Option<Arc<rustls::ServerConfig>>,
     // Client settings: HTTP parser and websocket settings.
-    pub clients_settings: connected::Settings,
+    pub clients_settings: connection::Settings,
 }
 
 /// Multithreaded TCP server designed for use as an HTTP server.
@@ -82,7 +82,7 @@ impl Server {
             num_threads: num_cpus::get(),
             settings: Settings {
                 tls_config: None,
-                clients_settings: connected::Settings::default(),
+                clients_settings: connection::Settings::default(),
             },
             stopper: Arc::new(AtomicBool::new(false)),
         }
