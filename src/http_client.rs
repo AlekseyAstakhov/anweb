@@ -109,7 +109,7 @@ impl HttpClient {
 
     /// Read raw http content (this is what is after headers).
     pub fn read_raw_content(&self, callback: impl FnMut(Vec<u8>, HttpClient) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
-        if let Ok(mut content_callback) = self.inner.raw_content_callback.lock() {
+        if let Ok(mut content_callback) = self.inner.content_callback.lock() {
             *content_callback = Some(Box::new(callback));
         }
     }

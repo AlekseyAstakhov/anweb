@@ -70,17 +70,6 @@ impl TcpClient {
     }
 
     /// Helps call callback.
-    pub(crate) fn call_raw_content_callback(&self, content: Vec<u8>) {
-        if let Ok(mut callback) = self.inner.raw_content_callback.lock() {
-            if let Some(callback) = &mut *callback {
-                if callback(content, HttpClient { inner: self.inner.clone() }).is_err() {
-                    self.disconnect();
-                }
-            }
-        }
-    }
-
-    /// Helps call callback.
     pub(crate) fn call_websocket_callback(&self, frame: WebsocketResult) {
         if let Ok(mut callback) = self.inner.websocket_callback.lock() {
             if let Some(callback) = &mut *callback {
@@ -103,7 +92,7 @@ impl TcpClient {
                 http_request_callback: Mutex::new(None),
                 is_http_mode: Arc::new(AtomicBool::new(false)),
                 websocket_callback: Mutex::new(None),
-                raw_content_callback: Mutex::new(None),
+                content_callback: Mutex::new(None),
                 need_disconnect: AtomicBool::new(false),
                 surpluses_to_write: Mutex::new(Vec::new()),
                 mio_poll,
@@ -239,7 +228,7 @@ pub(crate) struct InnerTcpClient {
     pub(crate) is_http_mode: Arc<AtomicBool>,
 
     /// Callback function that is called when content of HTTP request is fully received or error receiving it.
-    pub(crate) raw_content_callback: Mutex<Option<Box<dyn FnMut(Vec<u8>, HttpClient) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
+    pub(crate) content_callback: Mutex<Option<Box<dyn FnMut(Vec<u8>, HttpClient) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
     /// Callback function that is called when a new websocket frame is received or error receiving it.
     pub(crate) websocket_callback: Mutex<Option<Box<dyn FnMut(WebsocketResult, WebsocketClient) -> Result<(), WebsocketError> + Send>>>,
 

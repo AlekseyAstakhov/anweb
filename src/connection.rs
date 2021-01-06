@@ -1,5 +1,5 @@
 use crate::content_loader::ContentLoader;
-use crate::http_client::HttpError;
+use crate::http_client::{HttpError, HttpClient};
 use crate::request::{ConnectionType, HttpVersion, Request, RequestError};
 use crate::request_parser::{ParseHttpRequestSettings, Parser};
 use crate::tcp_client::TcpClient;
@@ -78,7 +78,7 @@ impl Connection {
         }
 
         if http {
-            let content_callback = self.client.inner.raw_content_callback.lock()
+            let content_callback = self.client.inner.content_callback.lock()
                 .unwrap_or_else(|err| { unreachable!(err) });
             let parse_request = content_callback.is_some();
             drop(content_callback); // unlock
@@ -125,7 +125,7 @@ impl Connection {
 
         self.client.call_http_callback(Ok(&self.request_parser.request));
 
-        let content_callback = self.client.inner.raw_content_callback.lock()
+        let content_callback = self.client.inner.content_callback.lock()
             .unwrap_or_else(|err| { unreachable!(err) });
 
         if content_callback.is_some() {
@@ -161,9 +161,14 @@ impl Connection {
 
         if let Some((content, surplus)) = content_loader.load_yet(data) {
             // Loaded!
-            self.client.call_raw_content_callback(content);
-            let mut content_callback = self.client.inner.raw_content_callback.lock()
+            let mut content_callback = self.client.inner.content_callback.lock()
                 .unwrap_or_else(|err| { unreachable!(err) });
+
+            if let Some(content_callback) = &mut *content_callback {
+                if content_callback(content, HttpClient { inner: self.client.inner.clone() }).is_err() {
+                    self.client.disconnect();
+                }
+            }
 
             *content_callback = None;
             drop(content_callback); // unlock
