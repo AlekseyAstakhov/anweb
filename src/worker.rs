@@ -31,6 +31,9 @@ pub struct Worker {
 
     /// For update once per second.
     http_date_string: Arc<RwLock<String>>,
+
+    /// Buffer for read from socket.
+    read_buf: [u8; 1024],
 }
 
 impl Worker {
@@ -58,6 +61,7 @@ impl Worker {
             },
             stopper,
             http_date_string,
+            read_buf: [0; 1024],
         })
     }
 
@@ -139,8 +143,9 @@ impl Worker {
                         if let Some(client) = self.connections.get_mut(token_id) {
                             let clients_settings = &self.settings.clients_settings;
 
+                            let read_buf = &mut self.read_buf[..];
                             let catch_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                                client.on_ready(clients_settings);
+                                client.on_read_ready(clients_settings, read_buf);
                             }));
 
                             if catch_result.is_err() {
@@ -171,7 +176,7 @@ impl Worker {
         }
     }
 
-    /// Removeы disconnected clients.
+    /// Remove disconnected clients.
     fn remove_disconnected(&mut self, event_callback: &mut (dyn FnMut(Event))) {
         self.connections.retain(|_, client| {
             if client.client.need_disconnect() {

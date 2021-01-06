@@ -36,20 +36,17 @@ impl Connected {
         }
     }
 
-    pub fn on_ready(&mut self, settings: &Settings) {
+    pub fn on_read_ready(&mut self, settings: &Settings, read_buf: &mut [u8]) {
         self.pipelining_http_requests_count = 0;
 
-        const BUF_SIZE: usize = 1024;
-        let mut tmp_buf = [0; BUF_SIZE];
-
-        match self.client.inner.read(&mut tmp_buf) {
+        match self.client.inner.read(read_buf) {
             Ok(read_cnt) => {
                 if read_cnt == 0 {
                     self.client.disconnect();
                     return;
                 }
 
-                self.process_read(&tmp_buf[..read_cnt], settings);
+                self.process_data(&read_buf[..read_cnt], settings);
             }
             Err(err) => {
                 if err.kind() == std::io::ErrorKind::WouldBlock {
@@ -68,19 +65,19 @@ impl Connected {
         }
     }
 
-    fn process_read(&mut self, tmp_buf: &[u8], settings: &Settings) {
+    fn process_data(&mut self, data: &[u8], settings: &Settings) {
         if self.client.need_disconnect() {
             return;
         }
 
-        let mut tls = true;
+        let mut http = true;
         if let Ok(callback) = self.client.inner.websocket_callback.lock() {
             if callback.is_some() {
-                tls = false;
+                http = false;
             }
         }
 
-        if tls {
+        if http {
             let parse_request = if let Ok(content_callback) = self.client.inner.raw_content_callback.lock() {
                 content_callback.is_none()
             } else {
@@ -88,16 +85,16 @@ impl Connected {
             };
 
             if parse_request {
-                self.parse_request(tmp_buf, settings);
+                self.parse_request(data, settings);
             } else {
-                self.read_content(tmp_buf, settings);
+                self.read_content(data, settings);
             }
         } else {
-            self.on_websocket_read(tmp_buf, settings);
+            self.on_websocket_read(data, settings);
         }
     }
 
-    fn parse_request(&mut self, tmp_buf: &[u8], settings: &Settings) {
+    fn parse_request(&mut self, data: &[u8], settings: &Settings) {
         self.pipelining_http_requests_count += 1;
         if self.pipelining_http_requests_count > settings.parse_http_request_settings.pipelining_requests_limit {
             self.client.call_http_callback(Err(HttpError::ParseRequestError(RequestError::PipeliningRequestsLimit)));
@@ -105,7 +102,7 @@ impl Connected {
             return;
         }
 
-        match self.request_parser.parse_yet(tmp_buf, &settings.parse_http_request_settings) {
+        match self.request_parser.parse_yet(data, &settings.parse_http_request_settings) {
             Ok(surplus) => {
                 self.process_request(surplus, settings);
             }
@@ -152,13 +149,13 @@ impl Connected {
 
         if !surplus.is_empty() && !self.client.need_disconnect() {
             // here is recursion
-            self.process_read(&surplus, settings);
+            self.process_data(&surplus, settings);
         }
     }
 
-    fn read_content(&mut self, tmp_buf: &[u8], settings: &Settings) {
+    fn read_content(&mut self, data: &[u8], settings: &Settings) {
         if let Some(content_loader) = &mut self.content_loader {
-            if let Some((content, surplus)) = content_loader.load_yet(tmp_buf) {
+            if let Some((content, surplus)) = content_loader.load_yet(data) {
                 // Loaded!
                 self.client.call_raw_content_callback(content);
                 if let Ok(mut callback) = self.client.inner.raw_content_callback.lock() {
@@ -168,14 +165,14 @@ impl Connected {
 
                 if !surplus.is_empty() {
                     // here is recursion
-                    self.process_read(&surplus, settings);
+                    self.process_data(&surplus, settings);
                 }
             }
         }
     }
 
-    fn on_websocket_read(&mut self, tmp_buf: &[u8], settings: &Settings) {
-        match self.websocket_parser.parse_yet(tmp_buf, settings.websocket_payload_limit) {
+    fn on_websocket_read(&mut self, data: &[u8], settings: &Settings) {
+        match self.websocket_parser.parse_yet(data, settings.websocket_payload_limit) {
             Ok(result) => {
                 if let Some((frame, surplus)) = result {
                     let frame_is_close = frame.is_close();
@@ -184,7 +181,7 @@ impl Connected {
                     if frame_is_close {
                         self.client.disconnect();
                     } else if !surplus.is_empty() {
-                        self.process_read(&surplus, settings); // here is recursion
+                        self.process_data(&surplus, settings); // here is recursion
                     }
                 }
             }
