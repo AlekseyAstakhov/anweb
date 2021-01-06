@@ -78,11 +78,10 @@ impl Connection {
         }
 
         if http {
-            let parse_request = if let Ok(content_callback) = self.client.inner.raw_content_callback.lock() {
-                content_callback.is_none()
-            } else {
-                true
-            };
+            let content_callback = self.client.inner.raw_content_callback.lock()
+                .unwrap_or_else(|err| { unreachable!(err) });
+            let parse_request = content_callback.is_some();
+            drop(content_callback); // unlock
 
             if parse_request {
                 self.parse_request(data, settings);
@@ -126,15 +125,18 @@ impl Connection {
 
         self.client.call_http_callback(Ok(&self.request_parser.request));
 
-        if let Ok(content_callback) = self.client.inner.raw_content_callback.lock() {
-            if content_callback.is_some() {
-                if let Some(content_len) = self.request_parser.request.content_len {
-                    self.content_loader = Some(ContentLoader::new(content_len));
-                } else {
-                    self.client.call_http_callback(Err(HttpError::TryLoadContentWhenNoContentLen));
-                }
+        let content_callback = self.client.inner.raw_content_callback.lock()
+            .unwrap_or_else(|err| { unreachable!(err) });
+
+        if content_callback.is_some() {
+            if let Some(content_len) = self.request_parser.request.content_len {
+                self.content_loader = Some(ContentLoader::new(content_len));
+            } else {
+                self.client.call_http_callback(Err(HttpError::TryLoadContentWhenNoContentLen));
             }
         }
+
+        drop(content_callback); // unlock
 
         if let Ok(websocket_callback) = self.client.inner.websocket_callback.lock() {
             if websocket_callback.is_some() {
@@ -154,19 +156,23 @@ impl Connection {
     }
 
     fn read_content(&mut self, data: &[u8], settings: &Settings) {
-        if let Some(content_loader) = &mut self.content_loader {
-            if let Some((content, surplus)) = content_loader.load_yet(data) {
-                // Loaded!
-                self.client.call_raw_content_callback(content);
-                if let Ok(mut callback) = self.client.inner.raw_content_callback.lock() {
-                    *callback = None;
-                }
-                self.content_loader = None;
+        let content_loader = self.content_loader.as_mut()
+            .unwrap_or_else(|| { unreachable!() });
 
-                if !surplus.is_empty() {
-                    // here is recursion
-                    self.process_data(&surplus, settings);
-                }
+        if let Some((content, surplus)) = content_loader.load_yet(data) {
+            // Loaded!
+            self.client.call_raw_content_callback(content);
+            let mut content_callback = self.client.inner.raw_content_callback.lock()
+                .unwrap_or_else(|err| { unreachable!(err) });
+
+            *content_callback = None;
+            drop(content_callback); // unlock
+
+            self.content_loader = None;
+
+            if !surplus.is_empty() {
+                // here is recursion
+                self.process_data(&surplus, settings);
             }
         }
     }
