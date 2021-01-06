@@ -156,28 +156,27 @@ impl Connection {
     }
 
     fn read_content(&mut self, data: &[u8], settings: &Settings) {
-        let content_loader = self.content_loader.as_mut()
-            .unwrap_or_else(|| { unreachable!() });
+        if let Some(content_loader) = &mut self.content_loader {
+            if let Some((content, surplus)) = content_loader.load_yet(data) {
+                // Loaded!
+                let mut content_callback = self.client.inner.content_callback.lock()
+                    .unwrap_or_else(|err| { unreachable!(err) });
 
-        if let Some((content, surplus)) = content_loader.load_yet(data) {
-            // Loaded!
-            let mut content_callback = self.client.inner.content_callback.lock()
-                .unwrap_or_else(|err| { unreachable!(err) });
-
-            if let Some(content_callback) = &mut *content_callback {
-                if content_callback(content, HttpClient { inner: self.client.inner.clone() }).is_err() {
-                    self.client.disconnect();
+                if let Some(content_callback) = &mut *content_callback {
+                    if content_callback(content, HttpClient { inner: self.client.inner.clone() }).is_err() {
+                        self.client.disconnect();
+                    }
                 }
-            }
 
-            *content_callback = None;
-            drop(content_callback); // unlock
+                *content_callback = None;
+                drop(content_callback); // unlock
 
-            self.content_loader = None;
+                self.content_loader = None;
 
-            if !surplus.is_empty() {
-                // here is recursion
-                self.process_data(&surplus, settings);
+                if !surplus.is_empty() {
+                    // here is recursion
+                    self.process_data(&surplus, settings);
+                }
             }
         }
     }
