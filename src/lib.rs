@@ -17,4 +17,3 @@ pub mod websocket;
 pub mod worker;
 mod connection;
 mod request_parser;
-mod content_loader;

@@ -1,7 +1,7 @@
 use crate::cookie::Cookie;
 use crate::request::{Request, RequestError};
 use crate::response;
-use crate::tcp_client::InnerTcpClient;
+use crate::tcp_client::{InnerTcpClient, ContentIsRead};
 use crate::websocket;
 use crate::websocket_client::{WebsocketClient, WebsocketError, WebsocketResult};
 use std::io;
@@ -108,7 +108,7 @@ impl HttpClient {
     }
 
     /// Read raw http content (this is what is after headers).
-    pub fn read_raw_content(&self, callback: impl FnMut(Vec<u8>, HttpClient) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
+    pub fn read_content(&self, callback: impl FnMut(&[u8], ContentIsRead, HttpClient) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
         if let Ok(mut content_callback) = self.inner.content_callback.lock() {
             *content_callback = Some(Box::new(callback));
         }

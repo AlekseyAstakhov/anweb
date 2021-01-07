@@ -209,6 +209,9 @@ impl Write for TcpClient {
     }
 }
 
+/// It's use in load content callback for inform about finish of reading.
+pub type ContentIsRead = bool;
+
 /// Private data of client.
 pub(crate) struct InnerTcpClient {
     /// Client id on server in connection order.
@@ -228,7 +231,7 @@ pub(crate) struct InnerTcpClient {
     pub(crate) is_http_mode: Arc<AtomicBool>,
 
     /// Callback function that is called when content of HTTP request is fully received or error receiving it.
-    pub(crate) content_callback: Mutex<Option<Box<dyn FnMut(Vec<u8>, HttpClient) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
+    pub(crate) content_callback: Mutex<Option<Box<dyn FnMut(&[u8]/*data part*/, ContentIsRead, HttpClient) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
     /// Callback function that is called when a new websocket frame is received or error receiving it.
     pub(crate) websocket_callback: Mutex<Option<Box<dyn FnMut(WebsocketResult, WebsocketClient) -> Result<(), WebsocketError> + Send>>>,
 

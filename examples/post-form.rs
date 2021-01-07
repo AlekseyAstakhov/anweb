@@ -20,11 +20,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             if request.has_post_form() {
                                 let request = (*request).clone();
                                 // Read all data of the request content.
-                                client.read_raw_content(move |content, http_client| {
-                                    // Parse content data as query.
-                                    let form = parse_query(&content);
-                                    let response_body = format!("Form: {:?}", form);
-                                    http_client.response_200_text(&response_body, &request);
+                                let mut content = vec![];
+                                client.read_content(move |data, done, http_client| {
+                                    content.extend_from_slice(data);
+                                    if done {
+                                        // Parse content data as query.
+                                        let form = parse_query(&content);
+                                        let response_body = format!("Form: {:?}", form);
+                                        http_client.response_200_text(&response_body, &request);
+                                    }
+
                                     Ok(())
                                 });
                             } else {

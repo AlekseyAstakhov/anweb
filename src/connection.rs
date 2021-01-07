@@ -1,4 +1,3 @@
-use crate::content_loader::ContentLoader;
 use crate::http_client::{HttpError, HttpClient};
 use crate::request::{ConnectionType, HttpVersion, Request, RequestError};
 use crate::request_parser::{ParseHttpRequestSettings, Parser};
@@ -15,8 +14,10 @@ pub struct Connection {
     /// Parser with accumulation data.
     request_parser: Parser,
 
-    /// Parser with accumulation data.
-    content_loader: Option<ContentLoader>,
+    /// Number of bytes of content that should be loaded with the http request.
+    content_len: usize,
+    /// Number of already read bytes of content.
+    already_read_content_len: usize,
 
     /// It's used if connection upgraded to websocket. The parser need to be recreated only after error!
     websocket_parser: websocket::Parser,
@@ -30,7 +31,8 @@ impl Connection {
         Connection {
             client,
             request_parser: Parser::new(),
-            content_loader: None,
+            content_len: 0,
+            already_read_content_len: 0,
             websocket_parser: websocket::Parser::new(),
             pipelining_http_requests_count: 0,
         }
@@ -130,7 +132,8 @@ impl Connection {
 
         if content_callback.is_some() {
             if let Some(content_len) = self.request_parser.request.content_len {
-                self.content_loader = Some(ContentLoader::new(content_len));
+                self.content_len = content_len;
+                self.already_read_content_len = 0;
             } else {
                 self.client.call_http_callback(Err(HttpError::TryLoadContentWhenNoContentLen));
             }
@@ -156,27 +159,38 @@ impl Connection {
     }
 
     fn read_content(&mut self, data: &[u8], settings: &Settings) {
-        if let Some(content_loader) = &mut self.content_loader {
-            if let Some((content, surplus)) = content_loader.load_yet(data) {
-                // Loaded!
-                let mut content_callback = self.client.inner.content_callback.lock()
-                    .unwrap_or_else(|err| { unreachable!(err) });
+        let mut content_callback = self.client.inner.content_callback.lock()
+            .unwrap_or_else(|err| { unreachable!(err) });
 
-                if let Some(content_callback) = &mut *content_callback {
-                    if content_callback(content, HttpClient { inner: self.client.inner.clone() }).is_err() {
-                        self.client.disconnect();
-                    }
-                }
+        let mid = self.content_len.checked_sub(self.already_read_content_len)
+            .unwrap_or_else(|| unreachable!())
+            .min(data.len());
 
-                *content_callback = None;
-                drop(content_callback); // unlock
+        let (content, surplus) = data.split_at(mid);
+        self.already_read_content_len += content.len();
+        let done = self.already_read_content_len >= self.content_len;
 
-                self.content_loader = None;
+        if let Some(content_callback) = &mut *content_callback {
+            if content_callback(content, done, HttpClient { inner: self.client.inner.clone() }).is_err() {
+                self.client.disconnect();
+            }
+        }
 
-                if !surplus.is_empty() {
-                    // here is recursion
-                    self.process_data(&surplus, settings);
-                }
+        if self.client.need_disconnect() {
+            return;
+        }
+
+        if done {
+            *content_callback = None;
+
+            self.content_len = 0;
+            self.already_read_content_len = 0;
+
+            drop(content_callback); // unlock
+
+            if !surplus.is_empty() {
+                // here is recursion
+                self.process_data(&surplus, settings);
             }
         }
     }

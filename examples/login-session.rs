@@ -46,9 +46,13 @@ fn response_for_unlogged_user(client: &HttpClient, request: &Request, users: &Us
                 if content_len < 256 {
                     let users = users.clone();
                     let request = request.clone();
-                    client.read_raw_content(move |content, mut client| {
-                        let form = parse_query(&content);
-                        response_to_login_form(&mut client, &request, &form, &users);
+                    let mut content = vec![];
+                    client.read_content(move |data, done, mut client| {
+                        content.extend_from_slice(data);
+                        if done {
+                            let form = parse_query(&content);
+                            response_to_login_form(&mut client, &request, &form, &users);
+                        }
                         Ok(())
                     })
                 } else {

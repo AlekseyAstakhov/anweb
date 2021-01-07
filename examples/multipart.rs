@@ -19,14 +19,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if request.method() == "POST" {
                             let request = (*request).clone();
                             // Read all data of the request content. Let it be for now.
-                            client.read_raw_content(move |content, client| {
-                                // Parse content as multipart.
-                                let parts = anweb::multipart::multipart(&content, &request)?;
-                                let mut response_body = "".to_string();
-                                for part in &parts {
-                                    response_body += &format!("disposition: {:?} len: {:?} bytes\n", from_utf8(&part.disposition.raw)?, part.data.len());
+                            let mut content = vec![];
+                            client.read_content(move |data, done, client| {
+                                content.extend_from_slice(data);
+
+                                if done {
+                                    // Parse content as multipart.
+                                    let parts = anweb::multipart::multipart(&content, &request)?;
+                                    let mut response_body = "".to_string();
+                                    for part in &parts {
+                                        response_body += &format!("disposition: {:?} len: {:?} bytes\n", from_utf8(&part.disposition.raw)?, part.data.len());
+                                    }
+                                    client.response_200_text(&response_body, &request);
                                 }
-                                client.response_200_text(&response_body, &request);
+
                                 Ok(())
                             });
                         }
