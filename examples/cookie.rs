@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let cookie_name = "test";
 
                 // if cookie with "test" name are already installed on the client (browser)
-                if let Some(_) = request.cookies().value(cookie_name) {
+                if let Some(_) = request.cookies().iter().find(|cookie| cookie.name == cookie_name) {
                     http_session.response_200_html(HTML_WHEN_COOKIE_RECEIVED, request);
                 } else {
                     // if cookies are not installed, then install it

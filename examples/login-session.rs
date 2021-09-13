@@ -118,9 +118,8 @@ fn response_for_logged_user(http_session: &HttpSession, request: &Request, users
 }
 
 fn session_id_from_request(request: &Request) -> Option<String> {
-    let cookies = request.cookies();
-    if let Some(session_id) = cookies.value(SESSION_ID_COOKIE_NAME) {
-        return Some(session_id.to_string());
+    if let Some(session_cookie) = request.cookies().iter().find(|cookie| cookie.name == SESSION_ID_COOKIE_NAME) {
+        return Some(session_cookie.value.to_string());
     }
 
     None
