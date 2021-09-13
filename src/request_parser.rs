@@ -237,6 +237,10 @@ impl Parser {
 
     fn header_is_content_length(&self, header: &Header) -> Result<Option<usize>, RequestError> {
         if header.name == "Content-Length" {
+            if !header.value.chars().nth(0).ok_or(RequestError::ContentLengthParseError)?.is_digit(10) {
+                return Err(RequestError::ContentLengthParseError);
+            }
+
             if let Ok(content_length) = header.value.parse() {
                 return Ok(Some(content_length));
             } else {
