@@ -21,10 +21,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_redirect_server("https://127.0.0.1:8443/", redirect_addr, 4)?;
 
     server.run(|server_event| match server_event {
-        server::Event::Connected(client) => {
-            client.switch_to_http(|http_result, http_client| {
+        server::Event::Connected(tcp_session) => {
+            tcp_session.upgrade_to_http(|http_result, http_session| {
                 let request = http_result?;
-                http_client.response_200_text("Hello world!", request);
+                http_session.response_200_text("Hello world!", request);
                 Ok(())
             });
         }

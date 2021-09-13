@@ -1,4 +1,4 @@
-use crate::http_client::HttpClient;
+use crate::http_session::HttpSession;
 use crate::mime::mime_type_by_extension;
 use crate::request::Request;
 use deflate::{deflate_bytes, deflate_bytes_gzip};
@@ -101,7 +101,7 @@ impl StaticFiles {
     }
 
     /// Send response with file content to the client.
-    pub fn response(&self, path: &str, request: &Request, client: &HttpClient) -> io::Result<()> {
+    pub fn response(&self, path: &str, request: &Request, http_session: &HttpSession) -> io::Result<()> {
         let mut result = Ok(());
 
         self.get(path, |static_file| {
@@ -133,13 +133,13 @@ impl StaticFiles {
                              {}\
                              \r\n",
                             request.version.to_string_for_response(),
-                            client.http_date_string(),
+                            http_session.http_date_string(),
                             crate::response::connection_str_by_request(request),
                             if static_file.last_modified_rfc7231.is_empty() { "".to_string() } else { format!("Last-Modified: {}\r\n", static_file.last_modified_rfc7231) },
                             if static_file.etag.is_empty() { "".to_string() } else { format!("ETag: {}\r\n", static_file.etag) }
                         ));
 
-                        client.response_raw(&response);
+                        http_session.response_raw(&response);
                         return;
                     }
 
@@ -170,7 +170,7 @@ impl StaticFiles {
                          Content-Type: {}\r\n\
                          \r\n",
                         request.version.to_string_for_response(),
-                        client.http_date_string(),
+                        http_session.http_date_string(),
                         crate::response::connection_str_by_request(request),
                         content_header,
                         if static_file.last_modified_rfc7231.is_empty() { "".to_string() } else { format!("Last-Modified: {}\r\n", static_file.last_modified_rfc7231) },
@@ -181,10 +181,10 @@ impl StaticFiles {
 
                     if content.len() < self.united_response_limit {
                         response.extend(&content[..]);
-                        client.response_raw(&response);
+                        http_session.response_raw(&response);
                     } else {
-                        client.response_raw(&response);
-                        client.response_raw_arc(&content);
+                        http_session.response_raw(&response);
+                        http_session.response_raw_arc(&content);
                     }
                 }
                 None => {

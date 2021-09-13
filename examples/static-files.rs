@@ -13,17 +13,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = Server::new(&addr)?;
     server.run(move |server_event| {
-        if let Event::Connected(client) = server_event {
+        if let Event::Connected(tcp_session) = server_event {
             let static_files = static_files.clone();
-            client.switch_to_http(move |http_result, client| {
+            tcp_session.upgrade_to_http(move |http_result, http_session| {
                 let request = http_result?;
                 match request.path().as_str() {
                     "/" => {
-                        client.response_200_html(&index_page_html(static_files.files()), request);
+                        http_session.response_200_html(&index_page_html(static_files.files()), request);
                     }
                     path => {
                         // File data or cache confirmation will be sent with response.
-                        static_files.response(path, request, &client)?;
+                        static_files.response(path, request, &http_session)?;
                     }
                 }
 

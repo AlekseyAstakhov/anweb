@@ -6,13 +6,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = Server::new(&addr)?;
     server.run(move |server_event| {
-        if let Event::Connected(client) = server_event {
-            client.switch_to_http(|http_result, client| {
+        if let Event::Connected(tcp_session) = server_event {
+            tcp_session.upgrade_to_http(|http_result, http_session| {
                 let request = http_result?;
                 match request.raw_path_str() {
                     "/" => {
                         if request.method() == "GET" {
-                            client.response_200_html(INDEX_HTML, &request);
+                            http_session.response_200_html(INDEX_HTML, &request);
                         }
                     }
                     "/form" => {
@@ -21,24 +21,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let request = (*request).clone();
                                 // Read all data of the request content.
                                 let mut content = vec![];
-                                client.read_content(move |data, done, http_client| {
+                                http_session.read_content(move |data, done, http_session| {
                                     content.extend_from_slice(data);
                                     if done {
                                         // Parse content data as query.
                                         let form = parse_query(&content);
                                         let response_body = format!("Form: {:?}", form);
-                                        http_client.response_200_text(&response_body, &request);
+                                        http_session.response_200_text(&response_body, &request);
                                     }
 
                                     Ok(())
                                 });
                             } else {
-                                client.response_422_text("Wrong form", request);
+                                http_session.response_422_text("Wrong form", request);
                             }
                         }
                     }
                     _ => {
-                        client.response_404_text("404 page not found", &request);
+                        http_session.response_404_text("404 page not found", &request);
                     }
                 }
 

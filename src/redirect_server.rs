@@ -21,11 +21,11 @@ pub fn run_redirect_server(path: &'static str, server_addr: SocketAddr, num_thre
 
         spawn(move || {
             server.run(&mut |server_event| {
-                if let server::Event::Connected(client) = server_event {
+                if let server::Event::Connected(tcp_session) = server_event {
                     let path = path.clone();
-                    client.switch_to_http(move |http_request, client| {
+                    tcp_session.upgrade_to_http(move |http_request, http_session| {
                         let request = http_request?;
-                        client.response_raw(&redirect_303_close(&path, request));
+                        http_session.response_raw(&redirect_303_close(&path, request));
                         Ok(())
                     });
                 }

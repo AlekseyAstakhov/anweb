@@ -9,28 +9,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     server.settings.clients_settings.websocket_payload_limit = 10000;
 
     server.run(|server_event| {
-        if let server::Event::Connected(client) = server_event {
-            client.switch_to_http(|http_result, mut http_client| {
+        if let server::Event::Connected(tcp_session) = server_event {
+            tcp_session.upgrade_to_http(|http_result, mut http_session| {
                 let request = http_result?;
                 match request.raw_path_str() {
                     "/" => {
-                        http_client.response_200_html(INDEX_HTML, &request);
+                        http_session.response_200_html(INDEX_HTML, &request);
                     }
                     "/ws" => {
                         // Try process websocket handshake request and switch connection
                         // to websocket mode, it will no longer process http requests.
-                        http_client.accept_websocket(&request, vec![], |websocket_result, mut client| {
+                        http_session.accept_websocket(&request, vec![], |websocket_result, mut websocket_session| {
                             // This callback will be called if a new frame arrives from the client
                             // or an error occurs.
                             let received_frame = websocket_result?;
-                            client.send(&frame(received_frame.opcode(), received_frame.payload()));
+                            websocket_session.send(&frame(received_frame.opcode(), received_frame.payload()));
                             // Need return Ok(()) from this callback.
                             // If you return any error then the tcp client connection will be closed.
                             Ok(())
                         })?;
                     }
                     _ => {
-                        http_client.response_404_text("404 page not found", &request);
+                        http_session.response_404_text("404 page not found", &request);
                     }
                 }
 

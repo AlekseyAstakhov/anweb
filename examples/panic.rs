@@ -4,12 +4,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = ([0, 0, 0, 0], 8080).into();
     let server = Server::new(&addr)?;
     server.run(move |server_event| {
-        if let Event::Connected(client) = server_event {
-            client.switch_to_http(|http_result, client| {
+        if let Event::Connected(tcp_session) = server_event {
+            tcp_session.upgrade_to_http(|http_result, http_session| {
                 let request = http_result?;
                 match request.path().as_str() {
                     "/" => {
-                        client.response_200_html(INDEX_HTML, &request);
+                        http_session.response_200_html(INDEX_HTML, &request);
                     }
                     "/panic" => {
                         // If there is a panic in the request processing code, the client connection
@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         panic!("panic test");
                     }
                     _ => {
-                        client.response_404_text("404 page not found", &request);
+                        http_session.response_404_text("404 page not found", &request);
                     }
                 }
 

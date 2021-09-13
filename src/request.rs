@@ -1,4 +1,4 @@
-use crate::cookie::{parse_cookie, CookiesFromClient};
+use crate::cookie::{parse_cookie, ReceivedCookies};
 use crate::query::{parse_query, Query};
 use percent_encoding::percent_decode;
 use std::str::{from_utf8, Utf8Error};
@@ -197,12 +197,12 @@ impl Request {
     }
 
     /// Cookies FROM FIRST HEADER "Cookie". RFC 6265, 5.4. "The Cookie Header: When the user agent generates an HTTP request, the user agent MUST NOT attach more than one Cookie header field".
-    pub fn cookies(&self) -> CookiesFromClient {
+    pub fn cookies(&self) -> ReceivedCookies {
         if let Some(cookie_header) = self.header_value("Cookie") {
             return parse_cookie(&cookie_header);
         }
 
-        CookiesFromClient { cookies: Vec::new() }
+        ReceivedCookies { cookies: Vec::new() }
     }
 
     /// Check existence header Content-Len, Content-Type and type application/x-www-form-urlencoded.

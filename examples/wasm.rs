@@ -10,19 +10,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = Server::new(&addr)?;
     server.run(move |server_event| {
-        if let Event::Connected(client) = server_event {
+        if let Event::Connected(tcp_session) = server_event {
             let wasm_file_data = wasm_file_data.clone();
-            client.switch_to_http(move |http_result, client| {
+            tcp_session.upgrade_to_http(move |http_result, http_session| {
                 let request = http_result?;
                 match request.raw_path_str() {
                     "/" => {
-                        client.response_200_html(INDEX_HTML, request);
+                        http_session.response_200_html(INDEX_HTML, request);
                     }
                     "/simple.wasm" => {
-                        client.response_200_wasm(&wasm_file_data, request);
+                        http_session.response_200_wasm(&wasm_file_data, request);
                     }
                     _ => {
-                        client.response_404_text("404", request);
+                        http_session.response_404_text("404", request);
                     }
                 }
 

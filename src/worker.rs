@@ -1,7 +1,7 @@
-use crate::connection;
-use crate::connection::Connection;
-use crate::server::{Error, Event, Settings};
+use crate::tcp_client;
 use crate::tcp_client::TcpClient;
+use crate::server::{Error, Event, Settings};
+use crate::tcp_session::TcpSession;
 
 use mio::net::TcpListener;
 use slab::Slab;
@@ -14,7 +14,7 @@ use std::time::Duration;
 /// Single threaded TCP server designed for use as an HTTP server.
 pub struct Worker {
     /// Connected clients.
-    pub connections: Slab<Connection>,
+    pub tcp_clients: Slab<TcpClient>,
 
     /// Connection counter. Used to create clients identifiers. Atomic in order to identify users on several such servers.
     pub connections_counter: Arc<AtomicU64>,
@@ -50,14 +50,14 @@ impl Worker {
         start_thread_of_update_http_date_string(http_date_string.clone());
 
         Ok(Worker {
-            connections: Slab::with_capacity(CLIENTS_CAPACITY),
+            tcp_clients: Slab::with_capacity(CLIENTS_CAPACITY),
             connections_counter: Arc::new(AtomicU64::new(0)),
             mio_poll: Arc::new(mio_poll),
             events: mio::Events::with_capacity(POLL_EVENTS_CNT),
             tcp_listener,
             settings: Settings {
                 tls_config: None,
-                clients_settings: connection::Settings::default(),
+                clients_settings: tcp_client::Settings::default(),
             },
             stopper,
             http_date_string,
@@ -96,23 +96,23 @@ impl Worker {
                 LISTENER_TOKEN => {
                     while let Ok((stream, addr)) = self.tcp_listener.accept() {
                         let client_id = self.connections_counter.fetch_add(1, Ordering::SeqCst);
-                        let slab_key = self.connections.vacant_entry().key();
+                        let slab_key = self.tcp_clients.vacant_entry().key();
 
                         let rustls_session = match &self.settings.tls_config {
                             Some(tls_config) => Some(Mutex::new(rustls::ServerSession::new(&tls_config))),
                             None => None,
                         };
 
-                        let client = TcpClient::new(client_id, slab_key, stream, addr, rustls_session, self.mio_poll.clone(), self.http_date_string.clone());
+                        let tcp_session = TcpSession::new(client_id, slab_key, stream, addr, rustls_session, self.mio_poll.clone(), self.http_date_string.clone());
 
-                        event_callback(Event::Connected(client.clone()));
+                        event_callback(Event::Connected(tcp_session.clone()));
 
-                        if client.need_disconnect() {
+                        if tcp_session.need_disconnect() {
                             continue;
                         }
 
                         let register_result;
-                        match client.inner.mio_stream.lock() {
+                        match tcp_session.inner.mio_stream.lock() {
                             Ok(stream) => {
                                 register_result = self.mio_poll.register(&*stream, mio::Token(slab_key), mio::Ready::readable(), mio::PollOpt::level());
                             }
@@ -126,7 +126,7 @@ impl Worker {
 
                         match register_result {
                             Ok(()) => {
-                                self.connections.insert(Connection::new(client.clone()));
+                                self.tcp_clients.insert(TcpClient::new(tcp_session.clone()));
                             }
                             Err(err) => {
                                 event_callback(Event::Error(Error::RegisterError(err)));
@@ -140,7 +140,7 @@ impl Worker {
 
                     if event.readiness().is_readable() {
                         // there is a possibility of receiving events on a already removed client if library user cloned stream and not deleted yet
-                        if let Some(client) = self.connections.get_mut(token_id) {
+                        if let Some(client) = self.tcp_clients.get_mut(token_id) {
                             let clients_settings = &self.settings.clients_settings;
 
                             let read_buf = &mut self.read_buf[..];
@@ -149,26 +149,26 @@ impl Worker {
                             }));
 
                             if catch_result.is_err() {
-                                need_remove = Some(client.client.id());
-                                event_callback(Event::Error(Error::Panicked(client.client.id())));
-                            } else if client.client.need_disconnect() {
-                                need_remove = Some(client.client.id());
+                                need_remove = Some(client.tcp_session.id());
+                                event_callback(Event::Error(Error::Panicked(client.tcp_session.id())));
+                            } else if client.tcp_session.need_disconnect() {
+                                need_remove = Some(client.tcp_session.id());
                             }
                         }
                     }
 
                     if event.readiness().is_writable() {
-                        if let Some(client) = self.connections.get_mut(token_id) {
-                            client.client.send_yet();
+                        if let Some(client) = self.tcp_clients.get_mut(token_id) {
+                            client.tcp_session.send_yet();
 
-                            if client.client.need_disconnect() {
-                                need_remove = Some(client.client.id());
+                            if client.tcp_session.need_disconnect() {
+                                need_remove = Some(client.tcp_session.id());
                             }
                         }
                     }
 
                     if let Some(client_id) = need_remove {
-                        self.connections.remove(token_id);
+                        self.tcp_clients.remove(token_id);
                         event_callback(Event::Disconnected(client_id));
                     }
                 }
@@ -178,9 +178,9 @@ impl Worker {
 
     /// Remove disconnected clients.
     fn remove_disconnected(&mut self, event_callback: &mut (dyn FnMut(Event))) {
-        self.connections.retain(|_, client| {
-            if client.client.need_disconnect() {
-                event_callback(Event::Disconnected(client.client.id()));
+        self.tcp_clients.retain(|_, client| {
+            if client.tcp_session.need_disconnect() {
+                event_callback(Event::Disconnected(client.tcp_session.id()));
                 return false;
             }
 

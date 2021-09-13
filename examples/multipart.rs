@@ -1,7 +1,7 @@
 use anweb::server::{Event, Server};
 use anweb::multipart::{MultipartParser, MultipartParserEvent};
 use std::str::from_utf8;
-use anweb::http_client::{HttpResult, HttpClient};
+use anweb::http_session::HttpSession;
 use anweb::request::Request;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -9,9 +9,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = Server::new(&addr)?;
     server.run(move |server_event| {
-        if let Event::Connected(client) = server_event {
-            client.switch_to_http(|http_result, client| {
-                on_request(http_result?, client)
+        if let Event::Connected(tcp_session) = server_event {
+            tcp_session.upgrade_to_http(|http_result, http_session| {
+                on_request(http_result?, http_session)
             })
         }
     })?;
@@ -19,19 +19,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn on_request(request: &Request, client: HttpClient) -> Result<(), Box<dyn std::error::Error>> {
+fn on_request(request: &Request, http_session: HttpSession) -> Result<(), Box<dyn std::error::Error>> {
     match request.path().as_str() {
         "/" => {
             if request.method() == "GET" {
-                client.response_200_html(INDEX_HTML, &request);
+                http_session.response_200_html(INDEX_HTML, &request);
             }
         }
         "/form" => {
             if request.method() == "POST" {
                 let request = (*request).clone();
                 let mut multipart = MultipartParser::new(&request)?;
-                let mut response_body = "".to_string();
-                client.read_content(move |data, done, client| {
+                let mut response_body = String::new();
+                    http_session.read_content(move |data, done, http_session| {
                     multipart.push(data, |ev| {
                         match ev {
                             MultipartParserEvent::Disposition(disposition) => {
@@ -43,7 +43,7 @@ fn on_request(request: &Request, client: HttpClient) -> Result<(), Box<dyn std::
                     })?;
 
                     if done {
-                        client.response_200_text(&response_body, &request);
+                        http_session.response_200_text(&response_body, &request);
                     }
 
                     Ok(())
@@ -51,7 +51,7 @@ fn on_request(request: &Request, client: HttpClient) -> Result<(), Box<dyn std::
             }
         }
         _ => {
-            client.response_404_text("404 page not found", &request);
+            http_session.response_404_text("404 page not found", &request);
         }
     }
 

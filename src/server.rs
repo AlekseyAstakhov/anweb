@@ -1,5 +1,5 @@
-use crate::connection;
-use crate::tcp_client::TcpClient;
+use crate::tcp_client;
+use crate::tcp_session::TcpSession;
 use crate::worker::Worker;
 
 use mio::net::TcpListener;
@@ -13,7 +13,7 @@ pub enum Event {
     /// Server has started (listening started).
     Started,
     /// New TCP connection has been established.
-    Connected(TcpClient),
+    Connected(TcpSession),
     /// TCP connection was closed. This can be caused either by the server’s initiative when the connection cannot be served, or by forced closure at the initiative of the library user.
     Disconnected(u64 /*id*/),
     /// Server error.
@@ -49,7 +49,7 @@ pub struct Settings {
     /// Configuration of TLS (rustls).
     pub tls_config: Option<Arc<rustls::ServerConfig>>,
     // Client settings: HTTP parser and websocket settings.
-    pub clients_settings: connection::Settings,
+    pub clients_settings: tcp_client::Settings,
 }
 
 /// Multithreaded TCP server designed for use as an HTTP server.
@@ -82,7 +82,7 @@ impl Server {
             num_threads: num_cpus::get(),
             settings: Settings {
                 tls_config: None,
-                clients_settings: connection::Settings::default(),
+                clients_settings: tcp_client::Settings::default(),
             },
             stopper: Arc::new(AtomicBool::new(false)),
         }

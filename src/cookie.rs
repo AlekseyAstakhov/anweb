@@ -39,7 +39,7 @@ impl<'a> Cookie<'a> {
 
 /// Cookie that the received from client.
 #[derive(Debug)]
-pub struct CookieFromClient<'a> {
+pub struct ReceivedCookie<'a> {
     /// Cookie name. Can't be empty.
     pub name: &'a str,
     /// Cookie value. Can be empty.
@@ -48,25 +48,25 @@ pub struct CookieFromClient<'a> {
 
 /// Cookies that the received from client.
 #[derive(Debug)]
-pub struct CookiesFromClient<'a> {
-    pub cookies: Vec<CookieFromClient<'a>>,
+pub struct ReceivedCookies<'a> {
+    pub cookies: Vec<ReceivedCookie<'a>>,
 }
 
-impl<'a> std::ops::Deref for CookiesFromClient<'a> {
-    type Target = Vec<CookieFromClient<'a>>;
+impl<'a> std::ops::Deref for ReceivedCookies<'a> {
+    type Target = Vec<ReceivedCookie<'a>>;
 
     fn deref(&self) -> &Self::Target {
         &self.cookies
     }
 }
 
-impl<'a> std::ops::DerefMut for CookiesFromClient<'a> {
+impl<'a> std::ops::DerefMut for ReceivedCookies<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.cookies
     }
 }
 
-impl<'a> CookiesFromClient<'a> {
+impl<'a> ReceivedCookies<'a> {
     /// Returns first cookie value by name.
     pub fn value(&self, name: &str) -> Option<&str> {
         for cookie in self.iter() {
@@ -80,8 +80,8 @@ impl<'a> CookiesFromClient<'a> {
 }
 
 /// Convert cookie string from http header to the struct.
-pub fn parse_cookie(cookies_header_value: &str) -> CookiesFromClient {
-    let mut result = CookiesFromClient { cookies: Vec::new() };
+pub fn parse_cookie(cookies_header_value: &str) -> ReceivedCookies {
+    let mut result = ReceivedCookies { cookies: Vec::new() };
 
     let cookies = cookies_header_value.split(|ch| ch == ';');
     for cookie in cookies {
@@ -94,13 +94,13 @@ pub fn parse_cookie(cookies_header_value: &str) -> CookiesFromClient {
                 if assignment_pos > 0 {
                     let name = &cookie[..assignment_pos];
                     let value = &cookie[assignment_pos + 1..];
-                    result.push(CookieFromClient { name, value })
+                    result.push(ReceivedCookie { name, value })
                 }
             } else {
                 // only name found "abc" or "abc="
                 let name = &cookie[..];
                 let value = "";
-                result.push(CookieFromClient { name, value })
+                result.push(ReceivedCookie { name, value })
             }
         }
     }
@@ -112,7 +112,7 @@ pub fn parse_cookie(cookies_header_value: &str) -> CookiesFromClient {
 mod tests {
     use super::*;
 
-    impl<'a> PartialEq for CookieFromClient<'a> {
+    impl<'a> PartialEq for ReceivedCookie<'a> {
         fn eq(&self, other: &Self) -> bool {
             self.name == other.name && self.value == other.value
         }
@@ -123,28 +123,28 @@ mod tests {
         assert!(parse_cookie("").cookies.is_empty());
         assert!(parse_cookie(";").cookies.is_empty());
         assert!(parse_cookie(";;").cookies.is_empty());
-        assert_eq!(parse_cookie("x").cookies, vec![CookieFromClient { name: "x", value: "" }]);
-        assert_eq!(parse_cookie("x=1").cookies, vec![CookieFromClient { name: "x", value: "1" }]);
-        assert_eq!(parse_cookie("x=ab").cookies, vec![CookieFromClient { name: "x", value: "ab" }]);
-        assert_eq!(parse_cookie(";x").cookies, vec![CookieFromClient { name: "x", value: "" }]);
-        assert_eq!(parse_cookie("x;").cookies, vec![CookieFromClient { name: "x", value: "" }]);
-        assert_eq!(parse_cookie(";x;").cookies, vec![CookieFromClient { name: "x", value: "" }]);
-        assert_eq!(parse_cookie(" x").cookies, vec![CookieFromClient { name: "x", value: "" }]);
-        assert_eq!(parse_cookie(" x;").cookies, vec![CookieFromClient { name: "x", value: "" }]);
-        assert_eq!(parse_cookie("x; ").cookies, vec![CookieFromClient { name: "x", value: "" }]);
-        assert_eq!(parse_cookie(" x; ").cookies, vec![CookieFromClient { name: "x", value: "" }]);
-        assert_eq!(parse_cookie(" x; ").cookies, vec![CookieFromClient { name: "x", value: "" }]);
-        assert_eq!(parse_cookie("x=").cookies, vec![CookieFromClient { name: "x", value: "" }]);
+        assert_eq!(parse_cookie("x").cookies, vec![ReceivedCookie { name: "x", value: "" }]);
+        assert_eq!(parse_cookie("x=1").cookies, vec![ReceivedCookie { name: "x", value: "1" }]);
+        assert_eq!(parse_cookie("x=ab").cookies, vec![ReceivedCookie { name: "x", value: "ab" }]);
+        assert_eq!(parse_cookie(";x").cookies, vec![ReceivedCookie { name: "x", value: "" }]);
+        assert_eq!(parse_cookie("x;").cookies, vec![ReceivedCookie { name: "x", value: "" }]);
+        assert_eq!(parse_cookie(";x;").cookies, vec![ReceivedCookie { name: "x", value: "" }]);
+        assert_eq!(parse_cookie(" x").cookies, vec![ReceivedCookie { name: "x", value: "" }]);
+        assert_eq!(parse_cookie(" x;").cookies, vec![ReceivedCookie { name: "x", value: "" }]);
+        assert_eq!(parse_cookie("x; ").cookies, vec![ReceivedCookie { name: "x", value: "" }]);
+        assert_eq!(parse_cookie(" x; ").cookies, vec![ReceivedCookie { name: "x", value: "" }]);
+        assert_eq!(parse_cookie(" x; ").cookies, vec![ReceivedCookie { name: "x", value: "" }]);
+        assert_eq!(parse_cookie("x=").cookies, vec![ReceivedCookie { name: "x", value: "" }]);
         assert!(parse_cookie("=x").cookies.is_empty());
         assert!(parse_cookie(" =x").cookies.is_empty());
-        assert_eq!(parse_cookie(" x=; ").cookies, vec![CookieFromClient { name: "x", value: "" }]);
-        assert_eq!(parse_cookie("x  = qq q ").cookies, vec![CookieFromClient { name: "x  ", value: " qq q " }]);
-        assert_eq!(parse_cookie("   x  = qq q ").cookies, vec![CookieFromClient { name: "x  ", value: " qq q " }]);
-        assert_eq!(parse_cookie("ab").cookies, vec![CookieFromClient { name: "ab", value: "" }]);
-        assert_eq!(parse_cookie(" abc").cookies, vec![CookieFromClient { name: "abc", value: "" }]);
-        assert_eq!(parse_cookie(" abc=xyz").cookies, vec![CookieFromClient { name: "abc", value: "xyz" }]);
-        assert_eq!(parse_cookie(" abc=xyz;xyz=123").cookies, vec![CookieFromClient { name: "abc", value: "xyz" }, CookieFromClient { name: "xyz", value: "123" }]);
-        assert_eq!(parse_cookie(" abc=xyz; xyz=123").cookies, vec![CookieFromClient { name: "abc", value: "xyz" }, CookieFromClient { name: "xyz", value: "123" }]);
+        assert_eq!(parse_cookie(" x=; ").cookies, vec![ReceivedCookie { name: "x", value: "" }]);
+        assert_eq!(parse_cookie("x  = qq q ").cookies, vec![ReceivedCookie { name: "x  ", value: " qq q " }]);
+        assert_eq!(parse_cookie("   x  = qq q ").cookies, vec![ReceivedCookie { name: "x  ", value: " qq q " }]);
+        assert_eq!(parse_cookie("ab").cookies, vec![ReceivedCookie { name: "ab", value: "" }]);
+        assert_eq!(parse_cookie(" abc").cookies, vec![ReceivedCookie { name: "abc", value: "" }]);
+        assert_eq!(parse_cookie(" abc=xyz").cookies, vec![ReceivedCookie { name: "abc", value: "xyz" }]);
+        assert_eq!(parse_cookie(" abc=xyz;xyz=123").cookies, vec![ReceivedCookie { name: "abc", value: "xyz" }, ReceivedCookie { name: "xyz", value: "123" }]);
+        assert_eq!(parse_cookie(" abc=xyz; xyz=123").cookies, vec![ReceivedCookie { name: "abc", value: "xyz" }, ReceivedCookie { name: "xyz", value: "123" }]);
 
         assert!(parse_cookie("=x").cookies.is_empty());
     }

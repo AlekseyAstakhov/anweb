@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
-pub mod tcp_client;
-pub mod http_client;
-pub mod websocket_client;
+pub mod tcp_session;
+pub mod http_session;
+pub mod websocket_session;
 pub mod cookie;
 pub mod tls;
 pub mod mime;
@@ -15,5 +15,5 @@ pub mod server;
 pub mod static_files;
 pub mod websocket;
 pub mod worker;
-mod connection;
+mod tcp_client;
 mod request_parser;

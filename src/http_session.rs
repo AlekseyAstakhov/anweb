@@ -1,9 +1,9 @@
 use crate::cookie::Cookie;
 use crate::request::{Request, RequestError};
 use crate::response;
-use crate::tcp_client::{InnerTcpClient, ContentIsRead};
+use crate::tcp_session::{InnerTcpSession, ContentIsRead};
 use crate::websocket;
-use crate::websocket_client::{WebsocketClient, WebsocketError, WebsocketResult};
+use crate::websocket_session::{WebsocketSession, WebsocketError, WebsocketResult};
 use std::io;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
@@ -11,11 +11,11 @@ use std::sync::Arc;
 
 /// This comes with an callback of HTTP request for create a response or close of client socket.
 #[derive(Clone)]
-pub struct HttpClient {
-    pub(crate) inner: Arc<InnerTcpClient>,
+pub struct HttpSession {
+    pub(crate) inner: Arc<InnerTcpSession>,
 }
 
-impl HttpClient {
+impl HttpSession {
     /// Client id on server in connection order.
     pub fn id(&self) -> u64 {
         self.inner.id()
@@ -108,14 +108,14 @@ impl HttpClient {
     }
 
     /// Read raw http content (this is what is after headers).
-    pub fn read_content(&self, callback: impl FnMut(&[u8], ContentIsRead, HttpClient) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
+    pub fn read_content(&self, callback: impl FnMut(&[u8], ContentIsRead, HttpSession) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
         if let Ok(mut content_callback) = self.inner.content_callback.lock() {
             *content_callback = Some(Box::new(callback));
         }
     }
 
     /// Begin work with websocket. Contains vector with response to handshake and custom data, if the vector is empty then server will make handshake itself.
-    pub fn accept_websocket(&mut self, request: &Request, payload: Vec<u8>, callback: impl FnMut(WebsocketResult, WebsocketClient) -> Result<(), WebsocketError> + Send + 'static) -> Result<WebsocketClient, io::Error> {
+    pub fn accept_websocket(&mut self, request: &Request, payload: Vec<u8>, callback: impl FnMut(WebsocketResult, WebsocketSession) -> Result<(), WebsocketError> + Send + 'static) -> Result<WebsocketSession, io::Error> {
         if payload.is_empty() {
             match websocket::handshake_response(request) {
                 Ok(response) => {
@@ -133,7 +133,7 @@ impl HttpClient {
             *websocket_callback = Some(Box::new(callback));
         }
 
-        Ok(WebsocketClient { inner: self.inner.clone() })
+        Ok(WebsocketSession { inner: self.inner.clone() })
     }
 
     /// Close of client socket. After clossing will be generated `sever::Event::Disconnected`.

@@ -1,503 +1,287 @@
-use crate::http_client::{HttpClient, HttpResult, HttpError};
-use crate::websocket_client::{WebsocketClient, WebsocketResult, WebsocketError};
-use rustls::Session;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
-use std::io;
-use std::io::{ErrorKind, Read, Write};
-use std::net::SocketAddr;
+use crate::http_session::{HttpError, HttpSession};
+use crate::request::{ConnectionType, HttpVersion, Request, RequestError};
+use crate::request_parser::{ParseHttpRequestSettings, Parser};
+use crate::tcp_session::TcpSession;
+use crate::websocket;
+use crate::websocket_session::WebsocketError;
+use std::sync::atomic::Ordering;
 
-/// Client connection to the server.
-#[derive(Clone)]
+/// Read, accumulate and process incoming data from clients. Parse http, websockets, tls and etc.
 pub struct TcpClient {
-    /// Private data.
-    pub(crate) inner: Arc<InnerTcpClient>,
+    /// The framework user is using this.
+    pub(crate) tcp_session: TcpSession,
+
+    /// Parser with accumulation data.
+    request_parser: Parser,
+
+    /// Number of bytes of content that should be loaded with the http request.
+    content_len: usize,
+    /// Number of already read bytes of content.
+    already_read_content_len: usize,
+
+    /// It's used if connection upgraded to websocket. The parser need to be recreated only after error!
+    websocket_parser: websocket::Parser,
+
+    /// For limit of requests count in one socket read operation.
+    pipelining_http_requests_count: u16,
 }
 
 impl TcpClient {
-    /// Client id on server in connection order.
-    pub fn id(&self) -> u64 {
-        self.inner.id()
-    }
-
-    /// An internet socket address, either IPv4 or IPv6.
-    pub fn addr(&self) -> &SocketAddr {
-        &self.inner.addr
-    }
-
-    /// Send arbitrary data to the client. Data may not be sent immediately, but in parts.
-    pub fn send(&mut self, data: &[u8]) {
-        self.inner.send(data);
-    }
-
-    /// Send arbitrary shared data to the client. Data may not be sent immediately, but in parts.
-    pub fn send_arc(&mut self, data: &Arc<Vec<u8>>) {
-        self.inner.send_arc(data);
-    }
-
-    /// Close of client socket. After clossing will be generated `sever::Event::Disconnected`.
-    pub fn disconnect(&self) {
-        self.inner.disconnect();
-    }
-
-    /// Set a callback function that is called when a new HTTP request is received or error receiving it.
-    pub fn switch_to_http(&self, callback: impl FnMut(HttpResult, HttpClient) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
-        if let Ok(mut http_request_callback) = self.inner.http_request_callback.lock() {
-            *http_request_callback = Some(Box::new(callback));
-            self.inner.is_http_mode.store(true, Ordering::SeqCst);
-        }
-    }
-
-    /// Need close of client socket.
-    pub(crate) fn need_disconnect(&self) -> bool {
-        self.inner.need_disconnect.load(Ordering::SeqCst)
-    }
-
-    /// Return true if client is using for receiving http requests and send responses.
-    pub(crate) fn is_http_mode(&self) -> bool {
-        self.inner.is_http_mode()
-    }
-
-    /// Helps call callback.
-    pub(crate) fn call_http_callback(&self, request: HttpResult) {
-        if let Ok(mut callback) = self.inner.http_request_callback.lock() {
-            if let Some(callback) = &mut *callback {
-                if callback(request, HttpClient { inner: self.inner.clone() }).is_err() {
-                    self.disconnect();
-                }
-            }
-        }
-    }
-
-    /// Helps call callback.
-    pub(crate) fn call_websocket_callback(&self, frame: WebsocketResult) {
-        if let Ok(mut callback) = self.inner.websocket_callback.lock() {
-            if let Some(callback) = &mut *callback {
-                if callback(frame, WebsocketClient { inner: self.inner.clone() }).is_err() {
-                    self.disconnect();
-                }
-            }
-        }
-    }
-
-    /// Called when new TCP connection.
-    pub(crate) fn new(id: u64, slab_key: usize, stream: mio::net::TcpStream, addr: SocketAddr, tls_session: Option<Mutex<rustls::ServerSession>>, mio_poll: Arc<mio::Poll>, http_date_string: Arc<RwLock<String>>) -> Self {
+    pub fn new(tcp_session: TcpSession) -> Self {
         TcpClient {
-            inner: Arc::new(InnerTcpClient {
-                id,
-                slab_key,
-                mio_stream: Mutex::new(stream),
-                addr,
-                tls_session,
-                http_request_callback: Mutex::new(None),
-                is_http_mode: Arc::new(AtomicBool::new(false)),
-                websocket_callback: Mutex::new(None),
-                content_callback: Mutex::new(None),
-                need_disconnect: AtomicBool::new(false),
-                surpluses_to_write: Mutex::new(Vec::new()),
-                mio_poll,
-                http_date_string,
-                need_disconnect_after_http_response: Arc::new(AtomicBool::new(false)),
-            }),
+            tcp_session,
+            request_parser: Parser::new(),
+            content_len: 0,
+            already_read_content_len: 0,
+            websocket_parser: websocket::Parser::new(),
+            pipelining_http_requests_count: 0,
         }
     }
 
-    /// Writes data that was not written in a previous write attempt. Called when the socket is ready to write again.
-    pub(crate) fn send_yet(&self) {
-        if let Ok(mut surpluses_for_write) = self.inner.surpluses_to_write.lock() {
-            // ???
-            if surpluses_for_write.is_empty() {
-                dbg!("unreachable code");
-                if let Ok(stream) = self.inner.mio_stream.lock() {
-                    match self.inner.mio_poll.reregister(&*stream, mio::Token(self.inner.slab_key), mio::Ready::readable(), mio::PollOpt::level()) {
-                        Ok(()) => {
-                            return;
-                        }
-                        Err(err) => {
-                            if self.is_http_mode() {
-                                self.call_http_callback(Err(HttpError::StreamError(err)));
-                            } else {
-                                self.call_websocket_callback(Err(WebsocketError::StreamError(err)));
-                            }
-                        }
-                    }
+    pub fn on_read_ready(&mut self, settings: &Settings, read_buf: &mut [u8]) {
+        self.pipelining_http_requests_count = 0;
+
+        match self.tcp_session.inner.read(read_buf) {
+            Ok(read_cnt) => {
+                if read_cnt == 0 {
+                    self.tcp_session.disconnect();
+                    return;
                 }
 
-                self.disconnect();
-                return;
+                self.process_data(&read_buf[..read_cnt], settings);
             }
-
-            for surplus in surpluses_for_write.iter_mut() {
-                // ???
-                if surplus.write_yet_cnt >= surplus.data.len() {
-                    dbg!("unreachable code");
-                    // remove latter from vec below
-                    continue;
-                }
-
-                match self.inner.write(&surplus.data[surplus.write_yet_cnt..]) {
-                    Ok(cnt) => {
-                        surplus.write_yet_cnt += cnt;
-                        if surplus.write_yet_cnt < surplus.data.len() {
-                            // will write latter when writeable
-                            break;
-                        }
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::WouldBlock {
+                } else if err.kind() == std::io::ErrorKind::ConnectionReset {
+                    self.tcp_session.disconnect();
+                } else {
+                    if self.tcp_session.is_http_mode() {
+                        self.tcp_session.call_http_callback(Err(HttpError::StreamError(err)));
+                    } else {
+                        self.tcp_session.call_websocket_callback(Err(WebsocketError::StreamError(err)));
                     }
-                    Err(err) => {
-                        if err.kind() == std::io::ErrorKind::WouldBlock {
-                            // will write latter when writeable
-                            break;
-                        } else if err.kind() == std::io::ErrorKind::ConnectionReset {
-                            self.disconnect();
-                        } else {
-                            if self.is_http_mode() {
-                                self.call_http_callback(Err(HttpError::StreamError(err)));
-                            } else {
-                                self.call_websocket_callback(Err(WebsocketError::StreamError(err)));
-                            }
-                            self.disconnect();
-                        }
-                    }
+
+                    self.tcp_session.disconnect();
                 }
             }
+        }
+    }
 
-            surpluses_for_write.retain(|surplus| surplus.write_yet_cnt < surplus.data.len());
+    fn process_data(&mut self, data: &[u8], settings: &Settings) {
+        if self.tcp_session.need_disconnect() {
+            return;
+        }
 
-            if surpluses_for_write.is_empty() {
-                if let Ok(stream) = self.inner.mio_stream.lock() {
-                    match self.inner.mio_poll.reregister(&*stream, mio::Token(self.inner.slab_key), mio::Ready::readable(), mio::PollOpt::level()) {
-                        Ok(()) => {
-                            // all data sent, switch to read mode
-                            if self.is_http_mode() && self.inner.need_disconnect_after_http_response.load(Ordering::SeqCst) {
-                                self.disconnect();
-                            }
+        let mut http = true;
+        if let Ok(callback) = self.tcp_session.inner.websocket_callback.lock() {
+            if callback.is_some() {
+                http = false;
+            }
+        }
 
-                            return;
-                        }
-                        Err(err) => {
-                            if self.is_http_mode() {
-                                self.call_http_callback(Err(HttpError::StreamError(err)));
-                            } else {
-                                self.call_websocket_callback(Err(WebsocketError::StreamError(err)));
-                            }
-                        }
-                    }
-                }
+        if http {
+            let content_callback = self.tcp_session.inner.content_callback.lock()
+                .unwrap_or_else(|err| { unreachable!(err) });
+            let parse_request = content_callback.is_none();
+            drop(content_callback); // unlock
 
-                self.disconnect();
+            if parse_request {
+                self.parse_request(data, settings);
+            } else {
+                self.read_content(data, settings);
             }
         } else {
-            dbg!("unreachable code");
-            self.disconnect();
+            self.on_websocket_read(data, settings);
         }
     }
-}
 
-impl Read for TcpClient {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.inner.read(buf)
-    }
-}
+    fn parse_request(&mut self, data: &[u8], settings: &Settings) {
+        self.pipelining_http_requests_count += 1;
+        if self.pipelining_http_requests_count > settings.parse_http_request_settings.pipelining_requests_limit {
+            self.tcp_session.call_http_callback(Err(HttpError::ParseRequestError(RequestError::PipeliningRequestsLimit)));
+            self.tcp_session.disconnect();
+            return;
+        }
 
-impl Write for TcpClient {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.inner.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
-    }
-}
-
-/// It's use in load content callback for inform about finish of reading.
-pub type ContentIsRead = bool;
-
-/// Private data of client.
-pub(crate) struct InnerTcpClient {
-    /// Client id on server in connection order.
-    id: u64,
-    /// Slab key of this client connection on http server.
-    slab_key: usize,
-    /// An internet socket address, either IPv4 or IPv6.
-    pub(crate) addr: SocketAddr,
-    /// Stream which received from MIO event.
-    pub(crate) mio_stream: Mutex<mio::net::TcpStream>,
-    /// TLS session.
-    tls_session: Option<Mutex<rustls::ServerSession>>,
-
-    /// Callback function that is called when a new HTTP request is received or error receiving it.
-    pub(crate) http_request_callback: Mutex<Option<Box<dyn FnMut(HttpResult, HttpClient) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
-    /// Sets true when callback is set.
-    pub(crate) is_http_mode: Arc<AtomicBool>,
-
-    /// Callback function that is called when content of HTTP request is fully received or error receiving it.
-    pub(crate) content_callback: Mutex<Option<Box<dyn FnMut(&[u8]/*data part*/, ContentIsRead, HttpClient) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
-    /// Callback function that is called when a new websocket frame is received or error receiving it.
-    pub(crate) websocket_callback: Mutex<Option<Box<dyn FnMut(WebsocketResult, WebsocketClient) -> Result<(), WebsocketError> + Send>>>,
-
-    /// Data that was not written in one write operation and is waiting for the socket to be ready.
-    surpluses_to_write: Mutex<Vec<SurplusForWrite>>,
-
-    /// Mio poll. Need only for reregister client for readable/writable.
-    mio_poll: Arc<mio::Poll>,
-
-    /// Determines whether to close connection. Connection will be closed when all other connections with read/write readiness are processing completed.
-    need_disconnect: AtomicBool,
-
-    /// Prepared rfc7231 string for http responses, update once per second.
-    pub(crate) http_date_string: Arc<RwLock<String>>,
-
-    /// For close the connection after the http response.
-    pub(crate) need_disconnect_after_http_response: Arc<AtomicBool>,
-}
-
-/// Data that was not written in one write operation and is waiting for the socket to be ready.
-struct SurplusForWrite {
-    data: Arc<Vec<u8>>,
-    write_yet_cnt: usize,
-}
-
-/// Private tcp-client data.
-impl InnerTcpClient {
-    /// Client id on server in connection order.
-    pub fn id(&self) -> u64 {
-        self.id
-    }
-
-    pub(crate) fn is_http_mode(&self) -> bool {
-        self.is_http_mode.load(Ordering::SeqCst)
-    }
-
-    pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        let readed_cnt = {
-            match self.mio_stream.lock() {
-                Ok(mut stream) => {
-                    //~=~=~=~=~=~=~=~=
-                    stream.read(buf)?
-                    //~=~=~=~=~=~=~=~=
-                }
-                Err(err) => {
-                    return Err(io::Error::new(ErrorKind::Other, format!("{}", err)));
-                }
+        match self.request_parser.parse_yet(data, &settings.parse_http_request_settings) {
+            Ok(surplus) => {
+                self.process_request(surplus, settings);
             }
-        };
-
-        match &self.tls_session {
-            None => Ok(readed_cnt),
-            Some(tls_session) => {
-                if readed_cnt == 0 {
-                    return Ok(0);
-                }
-
-                let read_buf: &mut dyn std::io::Read = &mut &buf[..readed_cnt];
-                match tls_session.lock() {
-                    Ok(mut tls_session) => {
-                        tls_session.read_tls(read_buf)?;
-
-                        if let Err(err) = tls_session.process_new_packets() {
-                            return Err(io::Error::new(ErrorKind::Other, err));
-                        }
-
-                        let tlse_readed_cnt = tls_session.read(&mut buf[..])?;
-                        while tls_session.wants_write() {
-                            if let Ok(mut stream) = self.mio_stream.lock() {
-                                //=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=
-                                tls_session.write_tls(&mut *stream)?;
-                                //=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=
-                            }
-                        }
-
-                        if tlse_readed_cnt == 0 {
-                            return Err(io::Error::new(std::io::ErrorKind::WouldBlock, "operation would block"));
-                        }
-
-                        Ok(tlse_readed_cnt)
+            Err(parse_err) => {
+                match parse_err {
+                    RequestError::Partial => {
                     }
-                    Err(err) => {
-                        Err(io::Error::new(ErrorKind::Other, format!("{}", err)))
+                    parse_err => {
+                        self.tcp_session.call_http_callback(Err(HttpError::ParseRequestError(parse_err)));
+                        // close anyway
+                        self.tcp_session.disconnect();
                     }
                 }
             }
         }
     }
 
-    /// Send arbitrary data to the client. Data may not be sent immediately, but in parts.
-    pub fn send(&self, data: &[u8]) {
-        if let Ok(mut supluses) = self.surpluses_to_write.lock() {
-            // already writing, add to the recording queue
-            if !supluses.is_empty() {
-                supluses.push(SurplusForWrite { data: Arc::new(data.to_vec()), write_yet_cnt: 0 });
-                return;
+    fn process_request(&mut self, surplus: Vec<u8>, settings: &Settings) {
+        let need_disconnect_after_response = need_close_by_version_and_connection(&self.request_parser.request);
+        self.tcp_session.inner.need_disconnect_after_http_response.store(need_disconnect_after_response, Ordering::SeqCst);
+
+        self.tcp_session.call_http_callback(Ok(&self.request_parser.request));
+
+        let content_callback = self.tcp_session.inner.content_callback.lock()
+            .unwrap_or_else(|err| { unreachable!(err) });
+
+        if content_callback.is_some() {
+            if let Some(content_len) = self.request_parser.request.content_len {
+                self.content_len = content_len;
+                self.already_read_content_len = 0;
+            } else {
+                self.tcp_session.call_http_callback(Err(HttpError::TryLoadContentWhenNoContentLen));
             }
         }
 
-        match self.write(data) {
-            Ok(cnt) => {
-                if cnt < data.len() {
-                    self.send_later(SurplusForWrite { data: Arc::new(data[cnt..].to_vec()), write_yet_cnt: 0 });
-                } else {
-                    // all data is written
-                    if self.is_http_mode() && self.need_disconnect_after_http_response.load(Ordering::SeqCst) {
-                        self.disconnect();
+        drop(content_callback); // unlock
+
+        if let Ok(websocket_callback) = self.tcp_session.inner.websocket_callback.lock() {
+            if websocket_callback.is_some() {
+                if let Ok(mut http_request_callback) = self.tcp_session.inner.http_request_callback.lock() {
+                    *http_request_callback = None;
+                    self.tcp_session.inner.is_http_mode.store(false, Ordering::SeqCst);
+                }
+            }
+        }
+
+        self.request_parser.restart();
+
+        if !surplus.is_empty() && !self.tcp_session.need_disconnect() {
+            // here is recursion
+            self.process_data(&surplus, settings);
+        }
+    }
+
+    fn read_content(&mut self, data: &[u8], settings: &Settings) {
+        let mut content_callback = self.tcp_session.inner.content_callback.lock()
+            .unwrap_or_else(|err| { unreachable!(err) });
+
+        let mid = self.content_len.checked_sub(self.already_read_content_len)
+            .unwrap_or_else(|| unreachable!())
+            .min(data.len());
+
+        let (content, surplus) = data.split_at(mid);
+        self.already_read_content_len += content.len();
+        let done = self.already_read_content_len >= self.content_len;
+
+        if let Some(content_callback) = &mut *content_callback {
+            if content_callback(content, done, HttpSession { inner: self.tcp_session.inner.clone() }).is_err() {
+                self.tcp_session.disconnect();
+            }
+        }
+
+        if self.tcp_session.need_disconnect() {
+            return;
+        }
+
+        if done {
+            *content_callback = None;
+
+            self.content_len = 0;
+            self.already_read_content_len = 0;
+
+            drop(content_callback); // unlock
+
+            if !surplus.is_empty() {
+                // here is recursion
+                self.process_data(&surplus, settings);
+            }
+        }
+    }
+
+    fn on_websocket_read(&mut self, data: &[u8], settings: &Settings) {
+        match self.websocket_parser.parse_yet(data, settings.websocket_payload_limit) {
+            Ok(result) => {
+                if let Some((frame, surplus)) = result {
+                    let frame_is_close = frame.is_close();
+                    self.tcp_session.call_websocket_callback(Ok(&frame));
+
+                    if frame_is_close {
+                        self.tcp_session.disconnect();
+                    } else if !surplus.is_empty() {
+                        self.process_data(&surplus, settings); // here is recursion
                     }
                 }
             }
             Err(err) => {
-                if err.kind() == std::io::ErrorKind::WouldBlock {
-                    self.send_later(SurplusForWrite { data: Arc::new(data.to_vec()), write_yet_cnt: 0 });
-                } else if err.kind() == std::io::ErrorKind::ConnectionReset {
-                    self.disconnect();
-                } else {
-                    self.disconnect();
-                    dbg!(err);
-                }
+                self.tcp_session.call_websocket_callback(Err(WebsocketError::ParseFrameError(err)));
+                self.tcp_session.disconnect();
             }
         }
     }
+}
 
-    /// Send arbitrary shared data to the client. Data may not be sent immediately, but in parts.
-    pub fn send_arc(&self, data: &Arc<Vec<u8>>) {
-        if let Ok(mut supluses) = self.surpluses_to_write.lock() {
-            // already writing, add to the recording queue
-            if !supluses.is_empty() {
-                supluses.push(SurplusForWrite { data: Arc::clone(data), write_yet_cnt: 0 });
-                return;
-            }
+/// Settings of incoming data processing.
+#[derive(Clone)]
+pub struct Settings {
+    /// Parser settings to be applied for new connections.
+    pub parse_http_request_settings: ParseHttpRequestSettings,
+    /// Limit of payload length in websocket frame.
+    pub websocket_payload_limit: usize,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            parse_http_request_settings: ParseHttpRequestSettings::default(),
+            websocket_payload_limit: 16_000_000,
         }
+    }
+}
 
-        match self.write(&data) {
-            Ok(cnt) => {
-                if cnt < data.len() {
-                    self.send_later(SurplusForWrite { data: Arc::clone(data), write_yet_cnt: cnt });
-                } else {
-                    // all data is written
-                    if self.is_http_mode() && self.need_disconnect_after_http_response.load(Ordering::SeqCst) {
-                        self.disconnect();
-                    }
-                }
-            }
-            Err(err) => {
-                if err.kind() == std::io::ErrorKind::WouldBlock {
-                    self.send_later(SurplusForWrite { data: Arc::clone(data), write_yet_cnt: 0 });
-                } else if err.kind() == std::io::ErrorKind::ConnectionReset {
-                    self.disconnect();
-                } else {
-                    self.disconnect();
-                    dbg!(err);
-                }
-            }
+/// Determines whether to close the connection after responding by the content of the request.
+fn need_close_by_version_and_connection(request: &Request) -> bool {
+    if let Some(connection_type) = &request.connection_type {
+        if let ConnectionType::Close = connection_type {
+            return true;
+        }
+    } else {
+        // by default in HTTP/1.0 connection close but in HTTP/1.1 keep-alive
+        if let HttpVersion::Http1_0 = request.version {
+            return true;
         }
     }
 
-    /// If the data was not sent immediately, it switches to the sending mode in parts.
-    fn send_later(&self, surplus: SurplusForWrite) {
-        if let Ok(mut supluses) = self.surpluses_to_write.lock() {
-            if let Ok(stream) = self.mio_stream.lock() {
-                supluses.push(surplus);
-                match self.mio_poll.reregister(&*stream, mio::Token(self.slab_key), mio::Ready::writable(), mio::PollOpt::level()) {
-                    Ok(()) => {
-                        return;
-                    }
-                    Err(err) => {
-                        dbg!(err);
-                        self.disconnect();
-                        return;
-                    }
-                }
-            }
-        }
+    false
+}
 
-        dbg!("unreachable code");
-        self.disconnect();
-    }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    /// Close of client socket. After clossing will be generated `sever::Event::Disconnected`.
-    pub fn disconnect(&self) {
-        self.need_disconnect.store(true, Ordering::SeqCst);
-    }
+    #[test]
+    fn test_version() {
+        let mut request = Request::new();
+        request.version = HttpVersion::Http1_0;
+        request.connection_type = Some(ConnectionType::Close);
+        assert_eq!(need_close_by_version_and_connection(&request), true);
 
-    fn write(&self, buf: &[u8]) -> io::Result<usize> {
-        let tls_session = &self.tls_session;
-        let stream = &self.mio_stream;
+        request.version = HttpVersion::Http1_0;
+        request.connection_type = Some(ConnectionType::KeepAlive);
+        assert_eq!(need_close_by_version_and_connection(&request), false);
 
-        match tls_session {
-            Some(tls_session) => {
-                match tls_session.lock() {
-                    Ok(mut tls_session) => {
-                        match stream.lock() {
-                            Ok(mut stream) => {
-                                //~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=
-                                let mut cnt = tls_session.write(buf)?;
+        // by default in HTTP/1.0 connection close
+        request.version = HttpVersion::Http1_0;
+        request.connection_type = None;
+        assert_eq!(need_close_by_version_and_connection(&request), true);
 
-                                while tls_session.wants_write() {
-                                    cnt += tls_session.write_tls(&mut *stream)?;
-                                }
+        request.version = HttpVersion::Http1_1;
+        request.connection_type = Some(ConnectionType::Close);
+        assert_eq!(need_close_by_version_and_connection(&request), true);
 
-                                Ok(cnt)
-                                //~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=
-                            }
-                            Err(err) => {
-                                Err(io::Error::new(ErrorKind::Other, format!("{}", err)))
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        Err(io::Error::new(ErrorKind::Other, format!("{}", err)))
-                    }
-                }
-            }
-            None => {
-                match stream.lock() {
-                    Ok(mut stream) => {
-                        //~=~=~=~=~=~=~=~=~=~=~=~=
-                        stream.write(buf)
-                        //~=~=~=~=~=~=~=~=~=~=~=~=
-                    }
-                    Err(err) => {
-                        Err(io::Error::new(ErrorKind::Other, format!("{}", err)))
-                    }
-                }
-            }
-        }
-    }
+        request.version = HttpVersion::Http1_1;
+        request.connection_type = Some(ConnectionType::KeepAlive);
+        assert_eq!(need_close_by_version_and_connection(&request), false);
 
-    fn flush(&self) -> io::Result<()> {
-        let tls_session = &self.tls_session;
-        let stream = &self.mio_stream;
-
-        match tls_session {
-            Some(tls_session) => {
-                match tls_session.lock() {
-                    Ok(mut tls_session) => {
-                        match stream.lock() {
-                            Ok(mut stream) => {
-                                //~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=
-                                tls_session.flush()?;
-                                stream.flush()
-                                //~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=
-                            }
-                            Err(err) => {
-                                Err(io::Error::new(ErrorKind::Other, format!("{}", err)))
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        Err(io::Error::new(ErrorKind::Other, format!("{}", err)))
-                    }
-                }
-            }
-            None => {
-                match stream.lock() {
-                    Ok(mut stream) => {
-                        //~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=
-                        stream.flush()
-                        //~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=
-                    }
-                    Err(err) => {
-                        Err(io::Error::new(ErrorKind::Other, format!("{}", err)))
-                    }
-                }
-            }
-        }
+        // by default in HTTP/1.1 connection keep-alive
+        request.version = HttpVersion::Http1_1;
+        request.connection_type = None;
+        assert_eq!(need_close_by_version_and_connection(&request), false);
     }
 }

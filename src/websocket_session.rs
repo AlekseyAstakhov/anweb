@@ -1,14 +1,14 @@
-use crate::tcp_client::InnerTcpClient;
+use crate::tcp_session::InnerTcpSession;
 use crate::websocket::{ParseFrameError, ParsedFrame};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct WebsocketClient {
-    pub(crate) inner: Arc<InnerTcpClient>,
+pub struct WebsocketSession {
+    pub(crate) inner: Arc<InnerTcpSession>,
 }
 
-impl WebsocketClient {
+impl WebsocketSession {
     /// Client id on server in connection order.
     pub fn id(&self) -> u64 {
         self.inner.id()

@@ -18,13 +18,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = Server::new(&addr)?;
     server.run(move |server_event| {
-        if let Event::Connected(client) = server_event {
+        if let Event::Connected(tcp_session) = server_event {
             let pool = pool.clone();
-            client.switch_to_http(move |http_result, client| {
+            tcp_session.upgrade_to_http(move |http_result, http_session| {
                 let request = http_result?;
                 match request.path().as_str() {
                     "/" => {
-                        client.response_200_html(INDEX_HTML, request);
+                        http_session.response_200_html(INDEX_HTML, request);
                     }
                     "/long" => {
                         let cloned_request = (*request).clone();
@@ -34,11 +34,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         pool.execute(move || {
                             // emitting long operation using sleep
                             sleep(Duration::from_secs(10));
-                            client.response_200_html("Complete", &cloned_request);
+                            http_session.response_200_html("Complete", &cloned_request);
                         });
                     }
                     _ => {
-                        client.response_404_text("404", request);
+                        http_session.response_404_text("404", request);
                     }
                 }
 

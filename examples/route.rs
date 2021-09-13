@@ -4,23 +4,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = ([0, 0, 0, 0], 8080).into();
     let server = Server::new(&addr)?;
     server.run(move |server_event| {
-        if let Event::Connected(client) = server_event {
-            client.switch_to_http(|http_result, client| {
+        if let Event::Connected(tcp_session) = server_event {
+            tcp_session.upgrade_to_http(|http_result, http_session| {
                 let request = http_result?;
 
                 // Routing is done manually in any way.
                 match request.path().as_str() {
                     "/" => {
-                        client.response_200_html(FIRST_PAGE_HTML, &request);
+                        http_session.response_200_html(FIRST_PAGE_HTML, &request);
                     }
                     "/second_page" => {
-                        client.response_200_html(SECOND_PAGE_HTML, &request);
+                        http_session.response_200_html(SECOND_PAGE_HTML, &request);
                     }
                     "/third_page" => {
-                        client.response_200_html(THIRD_PAGE_HTML, &request);
+                        http_session.response_200_html(THIRD_PAGE_HTML, &request);
                     }
                     _ => {
-                        client.response_404_text("404 page not found", &request);
+                        http_session.response_404_text("404 page not found", &request);
                     }
                 }
 

@@ -6,14 +6,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = Server::new(&addr)?;
     server.run(move |server_event| {
-        if let Event::Connected(client) = server_event {
-            client.switch_to_http(|http_result, client| {
+        if let Event::Connected(tcp_session) = server_event {
+            tcp_session.upgrade_to_http(|http_result, http_session| {
                 let request = http_result?;
                 let cookie_name = "test";
 
                 // if cookie with "test" name are already installed on the client (browser)
                 if let Some(_) = request.cookies().value(cookie_name) {
-                    client.response_200_html(HTML_WHEN_COOKIE_RECEIVED, request);
+                    http_session.response_200_html(HTML_WHEN_COOKIE_RECEIVED, request);
                 } else {
                     // if cookies are not installed, then install it
                     let cookie = Cookie {
@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         secure: false,
                     };
 
-                    client.response_200_html_with_cookie(HTML_WHEN_NO_COOKIE, &cookie, request);
+                    http_session.response_200_html_with_cookie(HTML_WHEN_NO_COOKIE, &cookie, request);
                 }
 
                 Ok(())

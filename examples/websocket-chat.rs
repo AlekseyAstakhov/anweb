@@ -3,14 +3,14 @@ use anweb::server;
 use anweb::server::Server;
 use anweb::tls::{load_certs, load_private_key};
 use anweb::websocket::{frame, handshake_response, ParsedFrame, TEXT_OPCODE};
-use anweb::websocket_client::WebsocketClient;
+use anweb::websocket_session::WebsocketSession;
 use rustls::{NoClientAuth, ServerConfig};
 use std::collections::btree_map::BTreeMap;
 use std::str::from_utf8;
 use std::sync::{Arc, Mutex, RwLock};
 
 struct Chat {
-    users: RwLock<BTreeMap<u64 /*id*/, WebsocketClient>>, // Cloned client tcp stream by id.
+    users: RwLock<BTreeMap<u64 /*id*/, WebsocketSession>>, // Cloned client tcp stream by id.
     messages: Mutex<Vec<String>>,
 }
 
@@ -37,13 +37,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     server.run(move |server_event| {
         match server_event {
-            server::Event::Connected(client) => {
+            server::Event::Connected(tcp_session) => {
                 let chat = chat.clone();
-                client.switch_to_http(move |http_result, mut http_client| {
+                tcp_session.upgrade_to_http(move |http_result, mut http_session| {
                     let request = http_result?;
                     match request.raw_path_str() {
                         "/" => {
-                            http_client.response_200_html(INDEX_HTML, &request);
+                            http_session.response_200_html(INDEX_HTML, &request);
                         }
                         "/ws" => {
                             let mut handshake_response = handshake_response(&request)?;
@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
 
                             let cloned_chat = chat.clone();
-                            let websocket = http_client.accept_websocket(&request, handshake_response, move |received_frame, _| {
+                            let websocket = http_session.accept_websocket(&request, handshake_response, move |received_frame, _| {
                                 let received_frame = received_frame?;
                                 on_websocket_frame(&received_frame, &cloned_chat);
                                 Ok(())
@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             users.insert(websocket.id(), websocket.clone());
                         }
                         _ => {
-                            http_client.response_404_text("404 page not found", &request);
+                            http_session.response_404_text("404 page not found", &request);
                         }
                     }
 
@@ -89,9 +89,9 @@ fn on_websocket_frame(received_frame: &ParsedFrame, chat: &Chat) {
             let mut messages = chat.messages.lock().unwrap();
             messages.push(text.to_string());
             let users = chat.users.read().unwrap();
-            for (_, client) in users.iter() {
-                let mut client = client.clone();
-                client.send(&frame(TEXT_OPCODE, text.as_bytes()));
+            for (_, websocket_session) in users.iter() {
+                let mut websocket_session = websocket_session.clone();
+                websocket_session.send(&frame(TEXT_OPCODE, text.as_bytes()));
             }
         }
     }
