@@ -1,82 +1,93 @@
 use crate::request::Request;
 
-pub struct Part<'a> {
-    pub disposition: Disposition<'a>,
-    pub data: &'a [u8],
+pub struct MultipartParser {
+    state: ParseState,
+    buf: Vec<u8>,
+    boundary: Vec<u8>,
+}
+
+impl MultipartParser {
+    pub fn new(request: &Request) -> Result<Self, MultipartError> {
+        let content_type_val = request.header_value("Content-Type").unwrap_or("");
+        if content_type_val.is_empty() {
+            return Err(MultipartError::ContentTypeHeaderError);
+        }
+
+        let boundary_index = match content_type_val.find("boundary=") {
+            None => return Err(MultipartError::ContentTypeHeaderError),
+            Some(index) => index,
+        };
+
+        let boundary = &content_type_val[boundary_index + 9..];
+        if boundary.is_empty() {
+            return Err(MultipartError::ContentTypeHeaderError);
+        }
+
+        Ok(Self {
+            state: ParseState::FindBoundary,
+            buf: vec![],
+            boundary: Vec::from(boundary),
+        })
+    }
+
+    pub fn push(&mut self, data: &[u8], mut f: impl FnMut(MultipartParserEvent)) -> Result<(), MultipartError> {
+        let pos = self.buf.len();
+        self.buf.extend_from_slice(data);
+
+        for i in pos..self.buf.len() {
+            match self.state {
+                ParseState::FindBoundary => {
+                    if i > self.boundary.len() + 1 && &self.buf[i - self.boundary.len() - 1..i - 1] == self.boundary {
+                        self.state = ParseState::FindDisposition(i + 1);
+                    }
+                }
+                ParseState::FindDisposition(disposition_index) => {
+                    if i - disposition_index > 3 && &self.buf[i - 3..=i] == b"\r\n\r\n" {
+                        let raw_disposition = &self.buf[disposition_index..i - 3];
+                        self.state = ParseState::ReadData(i + 1);
+
+                        f(MultipartParserEvent::Disposition( &Disposition { raw: raw_disposition }) );
+                    }
+                }
+                ParseState::ReadData(content_index) => {
+                    if i > self.boundary.len() + 1 && &self.buf[i - 1..=i] == b"\r\n" && &self.buf[i - 1 - self.boundary.len()..i - 1] == self.boundary {
+                        let part_data = &self.buf[content_index..i - 1 - self.boundary.len() - 4];
+                        self.state = ParseState::FindDisposition(i + 1);
+
+                        f(MultipartParserEvent::Data { data: part_data, end: true });
+
+                    } else if i > self.boundary.len() + 3 && &self.buf[i - 3..=i] == b"--\r\n" && &self.buf[i - 3 - self.boundary.len()..i - 3] == self.boundary {
+                        let part_data = &self.buf[content_index..i - self.boundary.len() - 7];
+
+                        f(MultipartParserEvent::Data { data: part_data, end: true });
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 pub struct Disposition<'a> {
     pub raw: &'a [u8],
 }
 
-/// Returns parse multipart result.
-pub fn multipart<'a>(content: &'a [u8], request: &Request) -> Result<Vec<Part<'a>>, MultipartError> {
-    let content_type_val = request.header_value("Content-Type").unwrap_or("");
-    if content_type_val.is_empty() {
-        return Err(MultipartError);
-    }
+pub enum MultipartParserEvent<'a, 'b> {
+    Disposition(&'a Disposition<'a>),
+    Data { data: &'b [u8], end: bool },
+}
 
-    let boundary_index = match content_type_val.find("boundary=") {
-        None => return Err(MultipartError),
-        Some(index) => index,
-    };
-
-    let boundary = &content_type_val[boundary_index + 9..];
-    if boundary.is_empty() {
-        return Err(MultipartError);
-    }
-
-    enum ParseState {
-        FindDisposition,
-        ParseHeaders(usize),
-        ParseContent(usize),
-    }
-
-    let mut parse_state = ParseState::FindDisposition;
-
-    let mut parts = Vec::new();
-
-    for i in 0..content.len() {
-        match parse_state {
-            ParseState::FindDisposition => {
-                if i > boundary.len() + 1 && &content[i - 1 - boundary.len()..i - 1] == boundary.as_bytes() {
-                    parse_state = ParseState::ParseHeaders(i + 1);
-                }
-            }
-            ParseState::ParseHeaders(disposition_index) => {
-                if i - disposition_index > 3 && &content[i - 3..=i] == b"\r\n\r\n" {
-                    let raw_disposition = &content[disposition_index..i - 3];
-                    parts.push(Part {
-                        disposition: Disposition { raw: raw_disposition },
-                        data: b"",
-                    });
-                    parse_state = ParseState::ParseContent(i + 1);
-                }
-            }
-            ParseState::ParseContent(content_index) => {
-                if i > boundary.len() + 1 && &content[i - 1..=i] == b"\r\n" && &content[i - 1 - boundary.len()..i - 1] == boundary.as_bytes() {
-                    let part_data = &content[content_index..i - 1 - boundary.len() - 4];
-                    parse_state = ParseState::ParseHeaders(i + 1);
-                    if let Some(last_part) = parts.last_mut() {
-                        last_part.data = part_data;
-                    }
-                } else if i > boundary.len() + 3 && &content[i - 3..=i] == b"--\r\n" && &content[i - 3 - boundary.len()..i - 3] == boundary.as_bytes() {
-                    let part_data = &content[content_index..i - boundary.len() - 7];
-                    if let Some(last_part) = parts.last_mut() {
-                        last_part.data = part_data;
-                    }
-
-                    return Ok(parts);
-                }
-            }
-        }
-    }
-
-    Err(MultipartError)
+enum ParseState {
+    FindBoundary,
+    FindDisposition(usize),
+    ReadData(usize),
 }
 
 #[derive(Debug)]
-pub struct MultipartError;
+pub enum MultipartError {
+    ContentTypeHeaderError,
+}
 
 impl std::fmt::Display for MultipartError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

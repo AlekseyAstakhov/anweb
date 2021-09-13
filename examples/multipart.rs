@@ -1,4 +1,5 @@
 use anweb::server::{Event, Server};
+use anweb::multipart::{MultipartParser, MultipartParserEvent};
 use std::str::from_utf8;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -15,21 +16,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             client.response_200_html(INDEX_HTML, &request);
                         }
                     }
-                    "/upload" => {
+                    "/form" => {
                         if request.method() == "POST" {
                             let request = (*request).clone();
-                            // Read all data of the request content. Let it be for now.
-                            let mut content = vec![];
+                            let mut multipart = MultipartParser::new(&request)?;
+                            let mut response_body = "".to_string();
                             client.read_content(move |data, done, client| {
-                                content.extend_from_slice(data);
+                                multipart.push(data, |ev| {
+                                    match ev {
+                                        MultipartParserEvent::Disposition(disposition) => {
+                                            response_body += &format!("disposition: {:?}\n", from_utf8(&disposition.raw).unwrap());
+                                        },
+                                        MultipartParserEvent::Data { data: _, end: _ } => {
+                                        },
+                                    }
+                                })?;
 
                                 if done {
-                                    // Parse content as multipart.
-                                    let parts = anweb::multipart::multipart(&content, &request)?;
-                                    let mut response_body = "".to_string();
-                                    for part in &parts {
-                                        response_body += &format!("disposition: {:?} len: {:?} bytes\n", from_utf8(&part.disposition.raw)?, part.data.len());
-                                    }
                                     client.response_200_text(&response_body, &request);
                                 }
 
@@ -53,10 +56,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 const INDEX_HTML: &str = r#"
 <html>
     <body>
-        <h3>Upload example</h3>
-        <form action="/upload" enctype="multipart/form-data" method="post">
-            <input type="file" name="file" id="file" /> <br>
-            <input type="submit" value="upload" />
+        <h3>Multipart example</h3>
+        <form action="/form" enctype="multipart/form-data" method="post">
+            <input type="file" name="file" id="file"/> <br>
+            <input type="text" name="text1" value="some text"/> <br>
+            <input type="submit" value="send"/>
         </form>
     </body>
 </html>
