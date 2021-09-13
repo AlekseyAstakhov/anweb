@@ -280,7 +280,7 @@ impl Default for ParseHttpRequestSettings {
             path_len_limit: 512,
             query_len_limit: 512,
             // I googled that default limits for headers on other servers: Apache 8K, Nginx 4K-8K, IIS 8K-16K, Tomcat 8K – 48K. I don’t know yet why so many.
-            headers_count_limit: 16,
+            headers_count_limit: 64,
             header_name_len_limit: 32,
             header_value_len_limit: 512,
             pipelining_requests_limit: 64,
