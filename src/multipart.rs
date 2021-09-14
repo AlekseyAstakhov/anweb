@@ -54,7 +54,7 @@ impl MultipartParser {
                         let part_data = &self.buf[content_index..i - 1 - self.boundary.len() - 4];
                         self.state = ParseState::FindDisposition(i + 1);
 
-                        f(MultipartParserEvent::Data { data: part_data, end: true });
+                        f(MultipartParserEvent::Data { data: part_data, end: false });
 
                     } else if i > self.boundary.len() + 3 && &self.buf[i - 3..=i] == b"--\r\n" && &self.buf[i - 3 - self.boundary.len()..i - 3] == self.boundary {
                         let part_data = &self.buf[content_index..i - self.boundary.len() - 7];
