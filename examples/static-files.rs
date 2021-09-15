@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let static_files = static_files.clone();
             tcp_session.upgrade_to_http(move |http_result, http_session| {
                 let request = http_result?;
-                match request.path().as_str() {
+                match request.path() {
                     "/" => {
                         http_session.response_200_html(&index_page_html(static_files.files()), request);
                     }

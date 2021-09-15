@@ -1,5 +1,6 @@
 use crate::request::{ConnectionType, Header, HttpVersion, Request, RequestError};
 use std::str::from_utf8;
+use percent_encoding::percent_decode;
 
 /// HTTP request parser.
 pub struct Parser {
@@ -80,6 +81,9 @@ impl Parser {
                     b' ' => {
                         self.request.path_indices = (path_index, i);
                         self.parse_state = ParseState::Version(i + 1);
+                        if let Ok(decoded) = percent_decode(&self.request.raw[self.request.path_indices.0..self.request.path_indices.1]).decode_utf8() {
+                            self.request.decoded_path = decoded.to_string();
+                        }
                     }
                     b'\n' => {
                         return Err(RequestError::RequestLine);
@@ -87,6 +91,9 @@ impl Parser {
                     b'?' => {
                         self.request.path_indices = (path_index, i);
                         self.parse_state = ParseState::Query(i + 1);
+                        if let Ok(decoded) = percent_decode(&self.request.raw[self.request.path_indices.0..self.request.path_indices.1]).decode_utf8() {
+                            self.request.decoded_path = decoded.to_string();
+                        }
                     }
                     _ => {
                         if i - path_index >= parse_settings.path_len_limit as usize {

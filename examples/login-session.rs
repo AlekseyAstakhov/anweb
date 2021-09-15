@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn response_for_unlogged_user(http_session: &HttpSession, request: &Request, users: &Users) -> Result<(), HttpError> {
-    match request.raw_path_str() {
+    match request.path() {
         "/" => {
             http_session.response_200_html(LOGIN_PAGE, request);
         }
@@ -97,7 +97,7 @@ fn response_to_login_form(http_session: &mut HttpSession, request: &Request, que
 }
 
 fn response_for_logged_user(http_session: &HttpSession, request: &Request, users: &Users, session_id: &str) -> Result<(), HttpError> {
-    match request.raw_path_str() {
+    match request.path() {
         "/" => {
             http_session.response_200_html(LOGGED_USER_PAGE, request);
         }

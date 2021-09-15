@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn on_request(request: &Request, http_session: HttpSession) -> Result<(), Box<dyn std::error::Error>> {
-    match request.path().as_str() {
+    match request.path() {
         "/" => {
             if request.method() == "GET" {
                 http_session.response_200_html(INDEX_HTML, &request);

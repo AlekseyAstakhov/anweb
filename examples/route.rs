@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let request = http_result?;
 
                 // Routing is done manually in any way.
-                match request.path().as_str() {
+                match request.path() {
                     "/" => {
                         http_session.response_200_html(FIRST_PAGE_HTML, &request);
                     }

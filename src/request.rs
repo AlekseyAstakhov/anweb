@@ -1,7 +1,6 @@
 use crate::cookie::{parse_cookie, CookieOfRequst};
 use crate::query::{parse_query, Query};
-use percent_encoding::percent_decode;
-use std::str::{from_utf8, Utf8Error};
+use std::str::from_utf8;
 
 /// HTTP request like "GET /?abc=123 HTTP/1.1\r\nConnection: keep-alive\r\n\r\n".
 #[derive(Debug, Clone)]
@@ -24,6 +23,10 @@ pub struct Request {
     pub(crate) connection_type: Option<ConnectionType>,
     /// Value of header "Content-length", if no header then None.
     pub(crate) content_len: Option<usize>,
+
+
+    /// Need for return $str from path() function
+    pub(crate) decoded_path: String,
 }
 
 /// Parsed header.
@@ -83,6 +86,7 @@ impl Default for Request {
             raw: Vec::with_capacity(64),
             connection_type: None,
             content_len: None,
+            decoded_path: String::new(),
         }
     }
 }
@@ -103,68 +107,14 @@ impl Request {
         from_utf8(&self.raw[0..self.method_end_index]).unwrap_or("")
     }
 
-    /// Method as raw bytes in request buffer.
-    pub fn raw_method(&self) -> &[u8] {
-        if self.method_end_index > self.raw.len() {
-            dbg!("unreachable code");
-            return b"";
-        }
-
-        &self.raw[0..self.method_end_index]
-    }
-
-    /// Decoded path. Empty if no valid utf-8 or decoding error.
-    pub fn path(&self) -> String {
-        if let Ok(decoded) = percent_decode(&self.raw_path()).decode_utf8() {
-            return decoded.to_string();
-        }
-
-        "".to_string()
-    }
-
-    /// Path as raw bytes in request buffer.
-    pub fn raw_path(&self) -> &[u8] {
-        if self.path_indices.0 > self.path_indices.1 || self.path_indices.1 > self.raw.len() {
-            dbg!("unreachable code");
-            return b"";
-        }
-
-        &self.raw[self.path_indices.0..self.path_indices.1]
-    }
-
-    /// Path slice in request buffer converted to utf8 string without decoding. Empty if invalid utf8 string.
-    pub fn raw_path_str(&self) -> &str {
-        if self.path_indices.0 > self.path_indices.1 || self.path_indices.1 > self.raw.len() {
-            dbg!("unreachable code");
-            return "";
-        }
-
-        from_utf8(&self.raw[self.path_indices.0..self.path_indices.1]).unwrap_or("")
+    /// Path. Decoded. Empty if no valid utf-8 or decoding error.
+    pub fn path(&self) -> &str {
+        return &self.decoded_path;
     }
 
     /// The parsed query to names and values array.
     pub fn query(&self) -> Query {
         parse_query(&self.raw_query())
-    }
-
-    /// Query slice in request buffer. Empty if no query.
-    pub fn raw_query(&self) -> &[u8] {
-        if self.raw_query_indices.0 > self.raw_query_indices.1 || self.raw_query_indices.1 > self.raw.len() {
-            dbg!("unreachable code");
-            return b"";
-        }
-
-        &self.raw[self.raw_query_indices.0..self.raw_query_indices.1]
-    }
-
-    /// Query slice in request buffer converted to utf8 string without decoding. Empty if no query. or invalid utf8 string.
-    pub fn raw_query_str(&self) -> Result<&str, Utf8Error> {
-        if self.raw_query_indices.0 > self.raw_query_indices.1 || self.raw_query_indices.1 > self.raw.len() {
-            dbg!("unreachable code");
-            return Ok("");
-        }
-
-        from_utf8(&self.raw[self.raw_query_indices.0..self.raw_query_indices.1])
     }
 
     /// Header value by name.
@@ -222,6 +172,36 @@ impl Request {
     /// Raw buffer of request.
     pub fn raw(&self) -> &[u8] {
         &self.raw
+    }
+
+    /// Method as raw bytes in request buffer.
+    pub fn raw_method(&self) -> &[u8] {
+        if self.method_end_index > self.raw.len() {
+            dbg!("unreachable code");
+            return b"";
+        }
+
+        &self.raw[0..self.method_end_index]
+    }
+
+    /// Path as raw bytes in request buffer.
+    pub fn raw_path(&self) -> &[u8] {
+        if self.path_indices.0 > self.path_indices.1 || self.path_indices.1 > self.raw.len() {
+            dbg!("unreachable code");
+            return b"";
+        }
+
+        &self.raw[self.path_indices.0..self.path_indices.1]
+    }
+
+    /// Query slice in request buffer. Empty if no query.
+    pub fn raw_query(&self) -> &[u8] {
+        if self.raw_query_indices.0 > self.raw_query_indices.1 || self.raw_query_indices.1 > self.raw.len() {
+            dbg!("unreachable code");
+            return b"";
+        }
+
+        &self.raw[self.raw_query_indices.0..self.raw_query_indices.1]
     }
 }
 

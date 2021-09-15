@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let chat = chat.clone();
                 tcp_session.upgrade_to_http(move |http_result, mut http_session| {
                     let request = http_result?;
-                    match request.raw_path_str() {
+                    match request.path() {
                         "/" => {
                             http_session.response_200_html(INDEX_HTML, &request);
                         }

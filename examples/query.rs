@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Event::Connected(tcp_session) = server_event {
             tcp_session.upgrade_to_http(|http_result, http_session| {
                 let request = http_result?;
-                match request.raw_path_str() {
+                match request.path() {
                     "/" => {
                         http_session.response_200_html(INDEX_HTML, request);
                     }
