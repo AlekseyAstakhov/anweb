@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // as clients connecting or read/write ready.
     server.run(move |server_event| {
         if let Event::Connected(tcp_session) = server_event {
-            // Switch to http mode
+            // Start using TCP connection for http
             tcp_session.upgrade_to_http(|request, http_session| {
                 // This callback receives a http requests
                 // or errors such as working with a socket, parsing of request, etc.
