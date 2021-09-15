@@ -7,11 +7,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // as clients connecting or read/write ready.
     server.run(move |server_event| {
         if let Event::Connected(tcp_session) = server_event {
+            // Switch to http mode
             tcp_session.upgrade_to_http(|request, http_session| {
-                // Send "Hello world!" response to any request.
+                // This callback receives a http requests
+                // or errors such as working with a socket, parsing of request, etc.
+
+                // Send response
                 http_session.response_200_text("Hello world!", request?);
-                // Need return Ok(()) from this callback.
-                // If you return any error then the tcp client connection will be closed.
+
+                // Need return Ok(()) from this callback if all ok.
+                // If return any error that received into this callback then default actions
+                // for that error will be taken.
+                // If return any other error then the session will be closed.
                 Ok(())
             });
         }
