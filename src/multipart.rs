@@ -18,7 +18,7 @@ impl MultipartParser {
             Some(index) => index,
         };
 
-        let boundary = &content_type_val[boundary_index + 9..];
+        let boundary = Vec::from(&content_type_val[boundary_index + 9..]);
         if boundary.is_empty() {
             return Err(MultipartError::ContentTypeHeaderError);
         }
@@ -26,46 +26,97 @@ impl MultipartParser {
         Ok(Self {
             state: ParseState::FindBoundary,
             buf: vec![],
-            boundary: Vec::from(boundary),
+            boundary,
         })
     }
 
     pub fn push(&mut self, data: &[u8], mut f: impl FnMut(MultipartParserEvent)) -> Result<(), MultipartError> {
-        let pos = self.buf.len();
         self.buf.extend_from_slice(data);
 
-        for i in pos..self.buf.len() {
+        let boundary_detect_len = self.boundary.len() + 4;
+
+        loop {
             match self.state {
                 ParseState::FindBoundary => {
-                    if i > self.boundary.len() + 1 && &self.buf[i - self.boundary.len() - 1..i - 1] == self.boundary {
-                        self.state = ParseState::FindDisposition(i + 1);
+                    if let Some((boundary_pos, closing_boundary)) = self.find_boundary(&self.buf) {
+                        self.state = ParseState::FindDisposition;
+
+                        if closing_boundary {
+                            f(MultipartParserEvent::Finished);
+                            self.buf.clear();
+                            break;
+                        }
+
+                        self.buf = Vec::from(&self.buf[boundary_pos + self.boundary.len() + 2..]);
+                        continue;
                     }
+
+                    if self.buf.len() > boundary_detect_len * 2 {
+                        self.buf = Vec::from(&self.buf[self.buf.len() - boundary_detect_len * 2..]);
+                    }
+
+                    break; // need more data
                 }
-                ParseState::FindDisposition(disposition_index) => {
-                    if i - disposition_index > 3 && &self.buf[i - 3..=i] == b"\r\n\r\n" {
-                        let raw_disposition = &self.buf[disposition_index..i - 3];
-                        self.state = ParseState::ReadData(i + 1);
-
-                        f(MultipartParserEvent::Disposition( &Disposition { raw: raw_disposition }) );
+                ParseState::FindDisposition => {
+                    if let Some(pos) = self.buf.windows(4).position(|win| win == b"\r\n\r\n") {
+                        let raw_disposition = &self.buf[0..pos];
+                        f(MultipartParserEvent::Disposition(&Disposition { raw: raw_disposition }));
+                        self.buf = Vec::from(&self.buf[pos + 4..]);
+                        self.state = ParseState::ReadData;
+                        continue;
                     }
+
+                    break; // need more data
                 }
-                ParseState::ReadData(content_index) => {
-                    if i > self.boundary.len() + 1 && &self.buf[i - 1..=i] == b"\r\n" && &self.buf[i - 1 - self.boundary.len()..i - 1] == self.boundary {
-                        let part_data = &self.buf[content_index..i - 1 - self.boundary.len() - 4];
-                        self.state = ParseState::FindDisposition(i + 1);
+                ParseState::ReadData => {
+                    if let Some((boundary_pos, closing_boundary)) = self.find_boundary(&self.buf) {
+                        let data_part = &self.buf[..boundary_pos - 4];
+                        if !data_part.is_empty() {
+                            f(MultipartParserEvent::Data { data_part, end: true });
+                        }
 
-                        f(MultipartParserEvent::Data { data: part_data, end: false });
+                        self.state = ParseState::FindDisposition;
 
-                    } else if i > self.boundary.len() + 3 && &self.buf[i - 3..=i] == b"--\r\n" && &self.buf[i - 3 - self.boundary.len()..i - 3] == self.boundary {
-                        let part_data = &self.buf[content_index..i - self.boundary.len() - 7];
+                        if closing_boundary {
+                            f(MultipartParserEvent::Finished);
+                            self.buf.clear();
+                            break; // Finish
+                        }
 
-                        f(MultipartParserEvent::Data { data: part_data, end: true });
+                        self.buf = Vec::from(&self.buf[boundary_pos + self.boundary.len()..]);
+                        continue;
                     }
+
+                    let data_part = &self.buf;
+                    f(MultipartParserEvent::Data { data_part, end: false });
+                    self.buf.clear();
+                    break; // need more data
                 }
             }
         }
 
         Ok(())
+    }
+
+    fn find_boundary(&self, buf: &[u8]) -> Option<(usize, bool/*closing boundary*/)> {
+        if buf.len() >= self.boundary.len() + 4 {
+            if let Some(pos) = buf.windows(2).position(|win| win == b"--") {
+                let boundary_pos = pos + 2;
+                if boundary_pos + self.boundary.len() + 2 < buf.len() {
+                    if &buf[boundary_pos..boundary_pos + self.boundary.len()] == self.boundary {
+                        if &buf[boundary_pos + self.boundary.len()..boundary_pos + self.boundary.len() + 2] == b"\r\n" {
+                            // --BOUNDARY\r\n
+                            return Some((boundary_pos, false));
+                        } else if &buf[boundary_pos + self.boundary.len()..boundary_pos + self.boundary.len() + 2] == b"--" {
+                            // --BOUNDARY--\r\n
+                            return Some((boundary_pos, true));
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 }
 
@@ -75,13 +126,14 @@ pub struct Disposition<'a> {
 
 pub enum MultipartParserEvent<'a, 'b> {
     Disposition(&'a Disposition<'a>),
-    Data { data: &'b [u8], end: bool },
+    Data { data_part: &'b [u8], end: bool },
+    Finished,
 }
 
 enum ParseState {
     FindBoundary,
-    FindDisposition(usize),
-    ReadData(usize),
+    FindDisposition,
+    ReadData,
 }
 
 #[derive(Debug)]

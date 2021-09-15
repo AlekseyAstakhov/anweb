@@ -37,7 +37,9 @@ fn on_request(request: &Request, http_session: HttpSession) -> Result<(), Box<dy
                             MultipartParserEvent::Disposition(disposition) => {
                                 response_body += &format!("disposition: {:?}\n", from_utf8(&disposition.raw).unwrap());
                             },
-                            MultipartParserEvent::Data { data: _, end: _ } => {
+                            MultipartParserEvent::Data { data_part: _, end: _ } => {
+                            },
+                            MultipartParserEvent::Finished => {
                             },
                         }
                     })?;
