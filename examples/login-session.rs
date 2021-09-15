@@ -22,7 +22,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let request = http_result?;
                 if let Some(session_id) = session_id_from_request(request) {
                     if is_logged(&session_id, &users) {
-                        response_for_logged_user(&http_session, request, &users, &session_id)?;
+                        response_for_logged_user(&http_session, request, &users, &session_id);
+                        return Ok(());
                     }
                 }
 
@@ -96,7 +97,7 @@ fn response_to_login_form(http_session: &mut HttpSession, request: &Request, que
     http_session.response_200_html(AUTHENTICATION_FAILED_PAGE, request);
 }
 
-fn response_for_logged_user(http_session: &HttpSession, request: &Request, users: &Users, session_id: &str) -> Result<(), HttpError> {
+fn response_for_logged_user(http_session: &HttpSession, request: &Request, users: &Users, session_id: &str) {
     match request.path() {
         "/" => {
             http_session.response_200_html(LOGGED_USER_PAGE, request);
@@ -113,8 +114,6 @@ fn response_for_logged_user(http_session: &HttpSession, request: &Request, users
             http_session.response_404_text("404 page not found", request);
         }
     }
-
-    Ok(())
 }
 
 fn session_id_from_request(request: &Request) -> Option<String> {
