@@ -10,17 +10,22 @@ impl MultipartParser {
     pub fn new(request: &Request) -> Result<Self, MultipartError> {
         let content_type_val = request.header_value("Content-Type").unwrap_or("");
         if content_type_val.is_empty() {
-            return Err(MultipartError::ContentTypeHeaderError);
+            return Err(MultipartError::NoContentTypeHeader);
         }
 
         let boundary_index = match content_type_val.find("boundary=") {
-            None => return Err(MultipartError::ContentTypeHeaderError),
+            None => return Err(MultipartError::NoBoundaryInContentTypeHeader),
             Some(index) => index,
         };
 
         let boundary = Vec::from(&content_type_val[boundary_index + 9..]);
         if boundary.is_empty() {
-            return Err(MultipartError::ContentTypeHeaderError);
+            return Err(MultipartError::EmptyBoundaryInHeader);
+        }
+
+        // Boundary must be no longer than 70 characters
+        if boundary.len() > 70 {
+            return Err(MultipartError::BoundaryLenLimit { len: boundary.len() });
         }
 
         Ok(Self {
@@ -138,7 +143,11 @@ enum ParseState {
 
 #[derive(Debug)]
 pub enum MultipartError {
-    ContentTypeHeaderError,
+    NoContentTypeHeader,
+    NoBoundaryInContentTypeHeader,
+    EmptyBoundaryInHeader,
+    // Boundary must be no longer than 70 characters
+    BoundaryLenLimit { len: usize },
 }
 
 impl std::fmt::Display for MultipartError {
