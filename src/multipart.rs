@@ -23,13 +23,13 @@ impl MultipartParser {
             return Err(MultipartError::EmptyBoundaryInHeader);
         }
 
-        // Boundary must be no longer than 70 characters
+        // Boundary must be no longer than 70 characters RFC 2046
         if boundary.len() > 70 {
             return Err(MultipartError::BoundaryLenLimit { len: boundary.len() });
         }
 
         Ok(Self {
-            state: ParseState::FindBoundary,
+            state: ParseState::FindFirstBoundary,
             buf: vec![],
             boundary,
         })
@@ -42,11 +42,19 @@ impl MultipartParser {
 
         loop {
             match self.state {
-                ParseState::FindBoundary => {
+                ParseState::FindFirstBoundary => {
+                    // There appears to be room for additional information prior to the first
+                    // encapsulation boundary and following the final boundary.
+                    // These areas should generally be left blank, and implementations should
+                    // ignore anything that appears before the first boundary or after the last one.
+                    // (RFC 2046)
+
                     if let Some((boundary_pos, closing_boundary)) = self.find_boundary(&self.buf) {
                         self.state = ParseState::FindDisposition;
 
                         if closing_boundary {
+                            // This is not explicitly defined in the RFC 2046, but browsers send
+                            // closing boundary delimiter when multiform not contains parts at all
                             f(MultipartParserEvent::Finished);
                             self.buf.clear();
                             break;
@@ -129,14 +137,14 @@ pub struct Disposition<'a> {
     pub raw: &'a [u8],
 }
 
-pub enum MultipartParserEvent<'a, 'b> {
+pub enum MultipartParserEvent<'a> {
     Disposition(&'a Disposition<'a>),
-    Data { data_part: &'b [u8], end: bool },
+    Data { data_part: &'a [u8], end: bool },
     Finished,
 }
 
 enum ParseState {
-    FindBoundary,
+    FindFirstBoundary,
     FindDisposition,
     ReadData,
 }
@@ -146,7 +154,7 @@ pub enum MultipartError {
     NoContentTypeHeader,
     NoBoundaryInContentTypeHeader,
     EmptyBoundaryInHeader,
-    // Boundary must be no longer than 70 characters
+    // By RFC 2046, boundary must be no longer than 70 characters
     BoundaryLenLimit { len: usize },
 }
 
