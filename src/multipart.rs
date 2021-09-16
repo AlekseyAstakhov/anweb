@@ -121,7 +121,7 @@ impl MultipartParser {
                             // --BOUNDARY\r\n
                             return Some((boundary_pos, false));
                         } else if &buf[boundary_pos + self.boundary.len()..boundary_pos + self.boundary.len() + 2] == b"--" {
-                            // --BOUNDARY--\r\n
+                            // --BOUNDARY--
                             return Some((boundary_pos, true));
                         }
                     }
