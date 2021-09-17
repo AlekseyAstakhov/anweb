@@ -27,7 +27,7 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
          Content-Type: {}\r\n\
          {}\
          {}\
-         {}\
+         {}{}{}\
          \r\n",
             request.version.to_string_for_response(),
             http_status_code_with_name(self.code),
@@ -37,7 +37,9 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
             self.content_type,
             if let Some(headers) = self.headers { headers } else { "" },
             if let Some(cookies) = self.cookies { cookies } else { "" },
+            if self.location.is_some() { "Location: " } else { "" },
             if let Some(location) = self.location { location } else { "" },
+            if self.location.is_some() { "\r\n" } else { "" },
         ));
 
         response.extend_from_slice(self.content);
