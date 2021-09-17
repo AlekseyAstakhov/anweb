@@ -35,6 +35,52 @@ impl<'a> Cookie<'a> {
             secure: false,
         }
     }
+
+    /// Return string with value for "Set-Cookie" header.
+    pub fn header_value(&self) -> String {
+        format!("{}={}{}{}{}{}{}{}\r\n",
+                self.name,
+                self.value,
+                cookie_path_str(self.path),
+                cookie_domain_str(self.domain),
+                cookie_expires_str(self.expires),
+                cookie_max_age_str(self.max_age),
+                if self.secure { "; Secure" } else { "" },
+                if self.http_only { "; HttpOnly" } else { "" },
+        )
+    }
+}
+
+fn cookie_path_str(path: Option<&str>) -> String {
+    if let Some(path) = path {
+        return format!("; Path={:?}", path);
+    }
+
+    String::new()
+}
+
+fn cookie_domain_str(domain: Option<&str>) -> String {
+    if let Some(domain) = domain {
+        return format!("; Domain={:?}", domain);
+    }
+
+    String::new()
+}
+
+fn cookie_expires_str(expires: Option<&str>) -> String {
+    if let Some(expires) = expires {
+        return format!("; Expires={:?}", expires);
+    }
+
+    String::new()
+}
+
+fn cookie_max_age_str(max_age: Option<i32>) -> String {
+    if let Some(max_age) = max_age {
+        return format!("; Max-Age={:?}", max_age);
+    }
+
+    String::new()
 }
 
 /// Cookie that the received from client.

@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // or errors such as working with a socket, parsing of request, etc.
 
                 // Send response
-                http_session.response_200_text("Hello world!", request?);
+                http_session.response(200).text("Hello world!").send(request?);
 
                 // Need return Ok(()) from this callback if all ok.
                 // If return any error that received into this callback then default actions

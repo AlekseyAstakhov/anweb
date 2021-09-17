@@ -1,5 +1,6 @@
 use anweb::cookie::Cookie;
 use anweb::server::{Event, Server};
+use anweb::request::Header;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = ([0, 0, 0, 0], 8080).into();
@@ -13,7 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // if cookie with "test" name are already installed on the client (browser)
                 if let Some(_) = request.cookies().iter().find(|cookie| cookie.name == cookie_name) {
-                    http_session.response_200_html(HTML_WHEN_COOKIE_RECEIVED, request);
+                    http_session.response(200).html(HTML_WHEN_COOKIE_RECEIVED).send(&request);
                 } else {
                     // if cookies are not installed, then install it
                     let cookie = Cookie {
@@ -27,7 +28,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         secure: false,
                     };
 
-                    http_session.response_200_html_with_cookie(HTML_WHEN_NO_COOKIE, &cookie, request);
+                    let header = Header {
+                        name: "Set-Cookie".to_string() ,
+                        value: cookie.header_value()
+                    }.to_string();
+
+                    http_session.response(200)
+                        .headers(&header)
+                        .html(HTML_WHEN_NO_COOKIE)
+                        .send(request);
                 }
 
                 Ok(())

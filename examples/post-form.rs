@@ -22,7 +22,7 @@ fn on_request(request: &Request, http_session: &HttpSession) -> Result<(), Box<d
     match request.path() {
         "/" => {
             if request.method() == "GET" {
-                http_session.response_200_html(INDEX_HTML, &request);
+                http_session.response(200).html(INDEX_HTML).send(&request);
             }
         }
         "/form" => {
@@ -39,18 +39,18 @@ fn on_request(request: &Request, http_session: &HttpSession) -> Result<(), Box<d
                             // Parse content data as query.
                             let form = parse_query(&content);
                             let response_body = format!("Form: {:?}", form);
-                            http_session.response_200_text(&response_body, &request);
+                            http_session.response(200).text(&response_body).send(&request);
                         }
 
                         Ok(())
                     });
                 } else {
-                    http_session.response_422_text("Wrong form", request);
+                    http_session.response(422).text("Wrong form").send(&request);
                 }
             }
         }
         _ => {
-            http_session.response_404_text("404 page not found", &request);
+            http_session.response(404).text("404 page not found").send(&request);
         }
     }
 

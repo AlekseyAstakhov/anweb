@@ -19,7 +19,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let request = http_result?;
                 match request.path() {
                     "/" => {
-                        http_session.response_200_html(&index_page_html(static_files.files()), request);
+                        let files_page = &index_page_html(static_files.files());
+                        http_session.response(200).html(files_page).send(&request);
                     }
                     path => {
                         // File data or cache confirmation will be sent with response.

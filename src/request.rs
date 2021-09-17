@@ -38,6 +38,16 @@ pub struct Header {
     pub value: String,
 }
 
+impl std::fmt::Display for Header {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.write_str(&self.name)?;
+        fmt.write_str(": ")?;
+        fmt.write_str(&self.value)?;
+        fmt.write_str("\r\n")?;
+        Ok(())
+    }
+}
+
 /// Connection type specified in HTTP request as Connection: keep-alive, Connection: close.
 #[derive(Debug, Clone)]
 pub enum ConnectionType {

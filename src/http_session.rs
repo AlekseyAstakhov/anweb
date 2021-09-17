@@ -1,6 +1,4 @@
-use crate::cookie::Cookie;
 use crate::request::{Request, RequestError};
-use crate::response;
 use crate::tcp_session::{InnerTcpSession, ContentIsRead};
 use crate::websocket;
 use crate::websocket_session::{WebsocketSession, WebsocketError, WebsocketResult};
@@ -8,6 +6,7 @@ use std::io;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use crate::response::Response;
 
 /// This comes with an callback of HTTP request for create a response or close of client socket.
 #[derive(Clone)]
@@ -26,75 +25,9 @@ impl HttpSession {
         &self.inner.addr
     }
 
-    /// Send response to client with status "200 OK" and text body.
-    pub fn response_200_text(&self, text: &str, request: &Request) {
-        self.response_raw(&response::text_200(text, request, &self.http_date_string()));
-    }
-
-    /// Send response to client with status "200 OK" and HTML body.
-    pub fn response_200_html(&self, body: &str, request: &Request) {
-        self.response_raw(&response::html_200(body, request, &self.http_date_string()));
-    }
-
-    pub fn response_200_wasm(&self, wasm_data: &[u8], request: &Request) {
-        self.response_raw(&response::wasm_200(wasm_data, request, &self.http_date_string()));
-    }
-
-    pub fn response_200_html_with_cookie(&self, body: &str, cookie: &Cookie, request: &Request) {
-        self.response_raw(&response::html_with_cookie_200(body, cookie, request, &self.http_date_string()));
-    }
-
-    pub fn response_404_empty(&self, request: &Request) {
-        self.response_raw(&response::empty_404(request, &self.http_date_string()));
-    }
-
-    pub fn response_404_text(&self, text: &str, request: &Request) {
-        self.response_raw(&response::text_404(text, request, &self.http_date_string()));
-    }
-
-    pub fn response_404_html(&self, html: &str, request: &Request) {
-        self.response_raw(&response::html_404(html, request, &self.http_date_string()));
-    }
-
-    pub fn response_422_empty(&self, request: &Request) {
-        self.response_raw(&response::unprocessable_entity_empty_422(request, &self.http_date_string()));
-    }
-
-    pub fn response_422_text(&self, text: &str, request: &Request) {
-        self.response_raw(&response::unprocessable_entity_with_text_422(text, request, &self.http_date_string()));
-    }
-
-    pub fn response_400_empty(&self, request: &Request) {
-        self.response_raw(&response::empty_bad_request_400(request, &self.http_date_string()));
-    }
-
-    pub fn response_400_text(&self, text: &str, request: &Request) {
-        self.response_raw(&response::bad_request_with_text_400(text, request, &self.http_date_string()));
-    }
-
-    pub fn response_303_with_cookie(&self, path: &str, cookie: &Cookie, request: &Request) {
-        self.response_raw(&response::redirect_303_with_cookie(path, cookie, request, &self.http_date_string()));
-    }
-
-    pub fn empty_500(&self, request: &Request) {
-        self.response_raw(&response::empty_500(request, &self.http_date_string()));
-    }
-
-    pub fn text_500(&self, text: &str, request: &Request) {
-        self.response_raw(&response::text_500(text, request, &self.http_date_string()));
-    }
-
-    pub fn html_500(&self, html: &str, request: &Request) {
-        self.response_raw(&response::html_500(html, request, &self.http_date_string()));
-    }
-
-    /// Prepared rfc7231 string for http responses, update once per second.
-    pub fn http_date_string(&self) -> String {
-        if let Ok(http_date_string) = self.inner.http_date_string.read() {
-            http_date_string.clone()
-        } else {
-            String::new()
-        }
+    /// Return response builder.
+    pub fn response(&self, code: u16) -> Response {
+        Response::new(code, &self)
     }
 
     /// Send raw data.
@@ -139,6 +72,15 @@ impl HttpSession {
     /// Close of client socket. After clossing will be generated `sever::Event::Disconnected`.
     pub fn disconnect(&self) {
         self.inner.disconnect()
+    }
+
+    /// Prepared rfc7231 string for http responses, update once per second.
+    pub fn http_date_string(&self) -> String {
+        if let Ok(http_date_string) = self.inner.http_date_string.read() {
+            http_date_string.clone()
+        } else {
+            String::new()
+        }
     }
 }
 

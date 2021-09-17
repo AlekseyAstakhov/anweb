@@ -11,13 +11,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let request = http_result?;
                 match request.path() {
                     "/" => {
-                        http_session.response_200_html(INDEX_HTML, request);
+                        http_session.response(200).html(INDEX_HTML).send(&request);
                     }
                     "/query" => {
                         on_query(request, &http_session)?;
                     }
                     _ => {
-                        http_session.response_404_text("404 page not found", &request);
+                        http_session.response(404).text("404 page not found").send(&request);
                     }
                 }
 
@@ -37,9 +37,9 @@ fn on_query(request: &Request, http_session: &HttpSession) -> Result<(), std::io
         // get second value by index, if no value result will by empty
         let second_value = query.value_at(1).unwrap_or("".to_string());
         let response_body = format!("Query: first = {:?}, second = {:?}", first_value, second_value);
-        http_session.response_200_text(&response_body, request);
+        http_session.response(200).html(&response_body).send(&request);
     } else {
-        http_session.response_422_text("Wrong query", request);
+        http_session.response(422).text("Wrong query").send(&request);
     }
 
     Ok(())

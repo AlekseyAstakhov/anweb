@@ -23,7 +23,7 @@ fn on_request(request: &Request, http_session: HttpSession) -> Result<(), Box<dy
     match request.path() {
         "/" => {
             if request.method() == "GET" {
-                http_session.response_200_html(INDEX_HTML, &request);
+                http_session.response(200).html(INDEX_HTML).send(&request);
             }
         }
         "/form" => {
@@ -45,7 +45,7 @@ fn on_request(request: &Request, http_session: HttpSession) -> Result<(), Box<dy
                     })?;
 
                     if done {
-                        http_session.response_200_text(&response_body, &request);
+                        http_session.response(200).text(&response_body).send(&request);
                     }
 
                     Ok(())
@@ -53,7 +53,7 @@ fn on_request(request: &Request, http_session: HttpSession) -> Result<(), Box<dy
             }
         }
         _ => {
-            http_session.response_404_text("404 page not found", &request);
+            http_session.response(404).text("404 page not found").send(&request);
         }
     }
 

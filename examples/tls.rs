@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         server::Event::Connected(tcp_session) => {
             tcp_session.upgrade_to_http(|http_result, http_session| {
                 let request = http_result?;
-                http_session.response_200_text("Hello world!", request);
+                http_session.response(200).text("Hello world!").send(request);
                 Ok(())
             });
         }

@@ -1,4 +1,3 @@
-use crate::response::redirect_303_close;
 use crate::server;
 use crate::worker::Worker;
 use mio::net::TcpListener;
@@ -6,6 +5,8 @@ use std::net::SocketAddr;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::thread::spawn;
+use crate::request::Header;
+use crate::response::headers_to_string;
 
 /// Run http server in own thread. Send redirect response to any request.
 pub fn run_redirect_server(path: &'static str, server_addr: SocketAddr, num_thread: usize) -> Result<(), std::io::Error> {
@@ -23,9 +24,10 @@ pub fn run_redirect_server(path: &'static str, server_addr: SocketAddr, num_thre
             server.run(&mut |server_event| {
                 if let server::Event::Connected(tcp_session) = server_event {
                     let path = path.clone();
+                    let headers = headers_to_string(&[ Header { name: "Location".to_string(), value: path } ]);
                     tcp_session.upgrade_to_http(move |http_request, http_session| {
                         let request = http_request?;
-                        http_session.response_raw(&redirect_303_close(&path, request));
+                        http_session.response(303).keep_alive(false).headers(&headers).send(&request);
                         Ok(())
                     });
                 }

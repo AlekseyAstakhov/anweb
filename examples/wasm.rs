@@ -16,13 +16,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let request = http_result?;
                 match request.path() {
                     "/" => {
-                        http_session.response_200_html(INDEX_HTML, request);
+                        http_session.response(200).html(INDEX_HTML).send(&request);
                     }
                     "/simple.wasm" => {
-                        http_session.response_200_wasm(&wasm_file_data, request);
+                        http_session.response(200).wasm(&wasm_file_data).send(&request);
                     }
                     _ => {
-                        http_session.response_404_text("404", request);
+                        http_session.response(404).text("404 page not found").send(&request);
                     }
                 }
 

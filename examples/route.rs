@@ -11,16 +11,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Routing is done manually in any way.
                 match request.path() {
                     "/" => {
-                        http_session.response_200_html(FIRST_PAGE_HTML, &request);
+                        http_session.response(200).html(FIRST_PAGE_HTML).send(&request);
                     }
                     "/second_page" => {
-                        http_session.response_200_html(SECOND_PAGE_HTML, &request);
+                        http_session.response(200).html(SECOND_PAGE_HTML).send(&request);
                     }
                     "/third_page" => {
-                        http_session.response_200_html(THIRD_PAGE_HTML, &request);
+                        http_session.response(200).html(THIRD_PAGE_HTML).send(&request);
                     }
                     _ => {
-                        http_session.response_404_text("404 page not found", &request);
+                        http_session.response(404).html("404 page not found").send(&request);
                     }
                 }
 
