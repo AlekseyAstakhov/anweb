@@ -62,19 +62,11 @@ pub fn frame(opcode: u8, payload: &[u8]) -> Vec<u8> {
     } else if data_len <= u16::MAX as usize {
         result.push(126);
         let bytes = (data_len as u64).to_be_bytes();
-        result.push(bytes[6]);
-        result.push(bytes[7]);
+        result.extend_from_slice(&bytes[6..8]);
     } else {
         result.push(127);
         let bytes = (data_len as u64).to_be_bytes();
-        result.push(bytes[0]);
-        result.push(bytes[1]);
-        result.push(bytes[2]);
-        result.push(bytes[3]);
-        result.push(bytes[4]);
-        result.push(bytes[5]);
-        result.push(bytes[6]);
-        result.push(bytes[7]);
+        result.extend_from_slice(&bytes);
     }
 
     result.extend_from_slice(payload);
