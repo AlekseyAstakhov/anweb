@@ -38,7 +38,7 @@ impl<'a> Cookie<'a> {
 
     /// Return string with value for "Set-Cookie" header.
     pub fn header_value(&self) -> String {
-        format!("{}={}{}{}{}{}{}{}\r\n",
+        format!("{}={}{}{}{}{}{}{}",
                 self.name,
                 self.value,
                 cookie_path_str(self.path),
@@ -48,6 +48,22 @@ impl<'a> Cookie<'a> {
                 if self.secure { "; Secure" } else { "" },
                 if self.http_only { "; HttpOnly" } else { "" },
         )
+    }
+}
+
+impl<'a> std::fmt::Display for Cookie<'a> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.write_str(&format!("Set-Cookie: {}={}{}{}{}{}{}{}\r\n",
+            self.name,
+            self.value,
+            cookie_path_str(self.path),
+            cookie_domain_str(self.domain),
+            cookie_expires_str(self.expires),
+            cookie_max_age_str(self.max_age),
+            if self.secure { "; Secure" } else { "" },
+            if self.http_only { "; HttpOnly" } else { "" },
+        ))?;
+        Ok(())
     }
 }
 

@@ -1,7 +1,7 @@
-use crate::request::{ConnectionType, HttpVersion, Request, Header};
+use crate::request::{ConnectionType, HttpVersion, Request};
 use crate::http_session::HttpSession;
 
-pub struct Response<'a, 'b, 'c, 'h> {
+pub struct Response<'a, 'b, 'c, 'd, 'e> {
     code: u16,
     content: &'a[u8],
     content_type: &'b str,
@@ -10,17 +10,19 @@ pub struct Response<'a, 'b, 'c, 'h> {
     /// If None - Connection header will be set by request Connection header and HTTP version.
     keep_alive_connection: Option<bool>,
     /// Extra headers.
-    headers: Option<&'h str>,
+    headers: Option<&'e str>,
+    cookies: Option<&'d str>,
 }
 
-impl<'a, 'b, 'c, 'h> Response<'a, 'b, 'c, 'h> {
+impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
     pub fn send(&self, request: &Request) {
         let mut response = Vec::from(format!(
-        "{} {}\r\n\
+            "{} {}\r\n\
          Date: {}\r\n\
          {}\
          Content-Length: {}\r\n\
          Content-Type: {}\r\n\
+         {}\
          {}\
          \r\n",
             request.version.to_string_for_response(),
@@ -29,11 +31,8 @@ impl<'a, 'b, 'c, 'h> Response<'a, 'b, 'c, 'h> {
             self.connection_str(&request),
             self.content.len(),
             self.content_type,
-            if let Some(headers) = self.headers {
-                headers
-            } else {
-                ""
-            },
+            if let Some(headers) = self.headers { headers } else { "" },
+            if let Some(cookies) = self.cookies { cookies } else { "" },
         ));
 
         response.extend_from_slice(self.content);
@@ -74,17 +73,26 @@ impl<'a, 'b, 'c, 'h> Response<'a, 'b, 'c, 'h> {
     /// Note: must not contain headers "Date", "Content-Length" and "Content-Type" because
     /// they will be set automatically when building the response.
     #[inline(always)]
-    pub fn headers(&mut self, headers: &'h str) -> &mut Self {
+    pub fn headers(&mut self, headers: &'e str) -> &mut Self {
         self.headers = Some(headers);
+        self
+    }
+
+    #[inline(always)]
+    pub fn cookies(&mut self, cookies: &'d str) -> &mut Self {
+        self.cookies = Some(cookies);
         self
     }
 
     pub(crate) fn new(code: u16, http_session: &'c HttpSession) -> Self {
         Response {
-            code, content: b"",
-            http_session, content_type: "",
+            code,
+            content: b"",
+            http_session,
+            content_type: "",
             keep_alive_connection: None,
             headers: None,
+            cookies: None,
         }
     }
 
@@ -99,14 +107,6 @@ impl<'a, 'b, 'c, 'h> Response<'a, 'b, 'c, 'h> {
             connection_str_by_request(request)
         }
     }
-}
-
-pub fn headers_to_string(headers: &[Header]) -> String {
-    let mut res = String::new();
-    for header in headers {
-        res += &header.to_string();
-    }
-    return res;
 }
 
 pub fn connection_str_by_request(request: &Request) -> &'static str {

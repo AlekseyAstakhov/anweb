@@ -6,7 +6,6 @@ use anweb::server::{Event, Server};
 use rand::prelude::*;
 use std::collections::hash_map::HashMap;
 use std::sync::{Arc, Mutex};
-use anweb::response::headers_to_string;
 
 const SESSION_ID_COOKIE_NAME: &str = "session_id";
 struct User {}
@@ -89,12 +88,10 @@ fn response_to_login_form(http_session: &mut HttpSession, request: &Request, que
             expires: None,
             max_age: None,
             secure: false,
-        };
-        let headers = headers_to_string(&[
-            Header { name: "Location".to_string() , value: "/".to_string() },
-            Header { name: "Set-Cookie".to_string() , value: cookie.header_value() },
-        ]);
-        http_session.response(303).headers(&headers).send(&request);
+        }.to_string();
+
+        let headers = Header { name: "Location".to_string() , value: "/".to_string() }.to_string();
+        http_session.response(303).headers(&headers).cookies(&cookie).send(&request);
         return;
     }
 
@@ -111,12 +108,9 @@ fn response_for_logged_user(http_session: &HttpSession, request: &Request, users
                 users.remove(session_id);
             }
 
-            let cookie = Cookie::remove("session_id");
-            let headers = headers_to_string(&[
-                Header { name: "Location".to_string() , value: "/".to_string() },
-                Header { name: "Set-Cookie".to_string() , value: cookie.header_value() },
-            ]);
-            http_session.response(303).headers(&headers).send(&request);
+            let cookie = Cookie::remove("session_id").to_string();
+            let header = Header { name: "Location".to_string() , value: "/".to_string() }.to_string();
+            http_session.response(303).headers(&header).cookies(&cookie).send(&request);
         }
         _ => {
             http_session.response(404).text("404 page not found").send(&request);
