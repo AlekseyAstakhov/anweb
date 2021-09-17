@@ -47,6 +47,15 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
         self.http_session.response_raw(&response);
     }
 
+    /// Set any type content.
+    #[inline(always)]
+    pub fn content(&mut self, content_type: &'b str, content: &'a [u8]) -> &mut Self {
+        self.content_type = content_type;
+        self.content = content;
+        self
+    }
+
+    /// Set "text/plain; charset=utf-8" content.
     #[inline(always)]
     pub fn text(&mut self, text: &'a str) -> &mut Self {
         self.content_type = "text/plain; charset=utf-8";
@@ -54,6 +63,7 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
         self
     }
 
+    /// Set "text/html; charset=utf-8" content.
     #[inline(always)]
     pub fn html(&mut self, html: &'a str) -> &mut Self {
         self.content_type = "text/html; charset=utf-8";
@@ -61,6 +71,7 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
         self
     }
 
+    /// Set "application/wasm" content.
     #[inline(always)]
     pub fn wasm(&mut self, wasm_data: &'a [u8]) -> &mut Self {
         self.content_type = "application/wasm";
