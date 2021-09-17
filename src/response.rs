@@ -31,7 +31,7 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
          \r\n",
             request.version.to_string_for_response(),
             http_status_code_with_name(self.code),
-            self.http_session.http_date_string(),
+            self.http_session.rfc7231_date_string(),
             self.connection_str(&request),
             self.content.len(),
             self.content_type,

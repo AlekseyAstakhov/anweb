@@ -133,7 +133,7 @@ impl StaticFiles {
                              {}\
                              \r\n",
                             request.version.to_string_for_response(),
-                            http_session.http_date_string(),
+                            http_session.rfc7231_date_string(),
                             crate::response::connection_str_by_request(request),
                             if static_file.last_modified_rfc7231.is_empty() { "".to_string() } else { format!("Last-Modified: {}\r\n", static_file.last_modified_rfc7231) },
                             if static_file.etag.is_empty() { "".to_string() } else { format!("ETag: {}\r\n", static_file.etag) }
@@ -170,7 +170,7 @@ impl StaticFiles {
                          Content-Type: {}\r\n\
                          \r\n",
                         request.version.to_string_for_response(),
-                        http_session.http_date_string(),
+                        http_session.rfc7231_date_string(),
                         crate::response::connection_str_by_request(request),
                         content_header,
                         if static_file.last_modified_rfc7231.is_empty() { "".to_string() } else { format!("Last-Modified: {}\r\n", static_file.last_modified_rfc7231) },

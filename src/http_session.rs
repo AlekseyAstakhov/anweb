@@ -20,7 +20,7 @@ impl HttpSession {
         self.inner.id()
     }
 
-    /// An internet socket address, either IPv4 or IPv6.
+    /// Net address of client, either IPv4 or IPv6.
     pub fn addr(&self) -> &SocketAddr {
         &self.inner.addr
     }
@@ -75,7 +75,7 @@ impl HttpSession {
     }
 
     /// Prepared rfc7231 string for http responses, update once per second.
-    pub fn http_date_string(&self) -> String {
+    pub fn rfc7231_date_string(&self) -> String {
         if let Ok(http_date_string) = self.inner.http_date_string.read() {
             http_date_string.clone()
         } else {
@@ -84,7 +84,7 @@ impl HttpSession {
     }
 }
 
-/// Received HTTP request or error receiving it.
+/// Received HTTP request or some error.
 pub type HttpResult<'a> = Result<&'a Request, HttpError>;
 
 /// Http client errors.
