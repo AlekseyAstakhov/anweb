@@ -1,7 +1,7 @@
 use anweb::http_session::{HttpSession, HttpError};
 use anweb::cookie::Cookie;
 use anweb::query::{parse_query, Query};
-use anweb::request::{Request, Header};
+use anweb::request::Request;
 use anweb::server::{Event, Server};
 use rand::prelude::*;
 use std::collections::hash_map::HashMap;
@@ -90,8 +90,7 @@ fn response_to_login_form(http_session: &mut HttpSession, request: &Request, que
             secure: false,
         }.to_string();
 
-        let headers = Header { name: "Location".to_string() , value: "/".to_string() }.to_string();
-        http_session.response(303).headers(&headers).cookies(&cookie).send(&request);
+        http_session.response(303).location("/").cookies(&cookie).send(&request);
         return;
     }
 
@@ -109,8 +108,7 @@ fn response_for_logged_user(http_session: &HttpSession, request: &Request, users
             }
 
             let cookie = Cookie::remove("session_id").to_string();
-            let header = Header { name: "Location".to_string() , value: "/".to_string() }.to_string();
-            http_session.response(303).headers(&header).cookies(&cookie).send(&request);
+            http_session.response(303).location("/").cookies(&cookie).send(&request);
         }
         _ => {
             http_session.response(404).text("404 page not found").send(&request);

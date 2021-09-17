@@ -1,7 +1,7 @@
 use crate::request::{ConnectionType, HttpVersion, Request};
 use crate::http_session::HttpSession;
 
-pub struct Response<'a, 'b, 'c, 'd, 'e> {
+pub struct Response<'a, 'b, 'c, 'd, 'e, 'f> {
     code: u16,
     content: &'a[u8],
     content_type: &'b str,
@@ -10,11 +10,14 @@ pub struct Response<'a, 'b, 'c, 'd, 'e> {
     /// If None - Connection header will be set by request Connection header and HTTP version.
     keep_alive_connection: Option<bool>,
     /// Extra headers.
-    headers: Option<&'e str>,
-    cookies: Option<&'d str>,
+    headers: Option<&'d str>,
+    /// Cookies headers.
+    cookies: Option<&'e str>,
+    /// Location header.
+    location: Option<&'f str>,
 }
 
-impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
+impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
     pub fn send(&self, request: &Request) {
         let mut response = Vec::from(format!(
             "{} {}\r\n\
@@ -22,6 +25,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
          {}\
          Content-Length: {}\r\n\
          Content-Type: {}\r\n\
+         {}\
          {}\
          {}\
          \r\n",
@@ -33,6 +37,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
             self.content_type,
             if let Some(headers) = self.headers { headers } else { "" },
             if let Some(cookies) = self.cookies { cookies } else { "" },
+            if let Some(location) = self.location { location } else { "" },
         ));
 
         response.extend_from_slice(self.content);
@@ -73,14 +78,22 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
     /// Note: must not contain headers "Date", "Content-Length" and "Content-Type" because
     /// they will be set automatically when building the response.
     #[inline(always)]
-    pub fn headers(&mut self, headers: &'e str) -> &mut Self {
+    pub fn headers(&mut self, headers: &'d str) -> &mut Self {
         self.headers = Some(headers);
         self
     }
 
+    /// Set Set-Cookie headers.
     #[inline(always)]
-    pub fn cookies(&mut self, cookies: &'d str) -> &mut Self {
+    pub fn cookies(&mut self, cookies: &'e str) -> &mut Self {
         self.cookies = Some(cookies);
+        self
+    }
+
+    /// Set "Location" header value.
+    #[inline(always)]
+    pub fn location(&mut self, location: &'f str) -> &mut Self {
+        self.location = Some(location);
         self
     }
 
@@ -93,6 +106,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
             keep_alive_connection: None,
             headers: None,
             cookies: None,
+            location: None,
         }
     }
 
