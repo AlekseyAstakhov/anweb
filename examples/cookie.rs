@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     http_session.response(200)
                         .cookies(&cookie)
                         .html(HTML_WHEN_NO_COOKIE)
-                        .send(request);
+                        .send(&request);
                 }
 
                 Ok(())

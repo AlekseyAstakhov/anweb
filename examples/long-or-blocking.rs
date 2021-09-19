@@ -27,14 +27,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         http_session.response(200).html(INDEX_HTML).send(&request);
                     }
                     "/long" => {
-                        let cloned_request = (*request).clone();
-
                         let pool = pool.lock().unwrap();
 
                         pool.execute(move || {
                             // emitting long operation using sleep
                             sleep(Duration::from_secs(10));
-                            http_session.response(200).html("Complete").send(&cloned_request);
+                            http_session.response(200).html("Complete").send(&request);
                         });
                     }
                     _ => {

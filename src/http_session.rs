@@ -85,7 +85,7 @@ impl HttpSession {
 }
 
 /// Received HTTP request or some error.
-pub type HttpResult<'a> = Result<&'a Request, HttpError>;
+pub type HttpResult = Result<Request, HttpError>;
 
 /// Http client errors.
 #[derive(Debug)]

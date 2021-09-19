@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     path => {
                         // File data or cache confirmation will be sent with response.
-                        static_files.response(path, request, &http_session)?;
+                        static_files.response(path, &request, &http_session)?;
                     }
                 }
 

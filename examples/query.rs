@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         http_session.response(200).html(INDEX_HTML).send(&request);
                     }
                     "/query" => {
-                        on_query(request, &http_session)?;
+                        on_query(&request, &http_session)?;
                     }
                     _ => {
                         http_session.response(404).text("404 page not found").send(&request);

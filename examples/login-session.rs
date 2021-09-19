@@ -20,14 +20,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let users = users.clone();
             tcp_session.upgrade_to_http(move |http_result, http_session| {
                 let request = http_result?;
-                if let Some(session_id) = session_id_from_request(request) {
+                if let Some(session_id) = session_id_from_request(&request) {
                     if is_logged(&session_id, &users) {
-                        response_for_logged_user(&http_session, request, &users, &session_id);
+                        response_for_logged_user(&http_session, &request, &users, &session_id);
                         return Ok(());
                     }
                 }
 
-                response_for_unlogged_user(&http_session, request, &users)?;
+                response_for_unlogged_user(&http_session, &request, &users)?;
 
                 Ok(())
             });

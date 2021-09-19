@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     server.run(move |server_event| {
         if let Event::Connected(tcp_session) = server_event {
             tcp_session.upgrade_to_http(|http_result, http_session| {
-                on_request(http_result?, http_session)
+                on_request(&http_result?, http_session)
             })
         }
     })?;

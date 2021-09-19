@@ -104,8 +104,8 @@ impl TcpClient {
         }
 
         match self.request_parser.parse_yet(data, &settings.parse_http_request_settings) {
-            Ok(surplus) => {
-                self.process_request(surplus, settings);
+            Ok((request, surplus)) => {
+                self.process_request(request, surplus, settings);
             }
             Err(parse_err) => {
                 match parse_err {
@@ -121,17 +121,19 @@ impl TcpClient {
         }
     }
 
-    fn process_request(&mut self, surplus: Vec<u8>, settings: &Settings) {
-        let need_disconnect_after_response = need_close_by_version_and_connection(&self.request_parser.request);
+    fn process_request(&mut self, request: Request, surplus: Vec<u8>, settings: &Settings) {
+        let need_disconnect_after_response = need_close_by_version_and_connection(&request);
         self.tcp_session.inner.need_disconnect_after_http_response.store(need_disconnect_after_response, Ordering::SeqCst);
 
-        self.tcp_session.call_http_callback(Ok(&self.request_parser.request));
+        let content_len = request.content_len;
+
+        self.tcp_session.call_http_callback(Ok(request));
 
         let content_callback = self.tcp_session.inner.content_callback.lock()
             .unwrap_or_else(|err| { unreachable!(err) });
 
         if content_callback.is_some() {
-            if let Some(content_len) = self.request_parser.request.content_len {
+            if let Some(content_len) = content_len {
                 self.content_len = content_len;
                 self.already_read_content_len = 0;
             } else {
@@ -149,8 +151,6 @@ impl TcpClient {
                 }
             }
         }
-
-        self.request_parser.restart();
 
         if !surplus.is_empty() && !self.tcp_session.need_disconnect() {
             // here is recursion

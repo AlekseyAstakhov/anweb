@@ -5,7 +5,7 @@ use percent_encoding::percent_decode;
 /// HTTP request parser.
 pub struct Parser {
     /// Not ready request. Internal state between parsing iterations.
-    pub request: Request,
+    request: Request,
     /// What parse now. Internal state between parsing iterations.
     parse_state: ParseState,
 }
@@ -54,7 +54,7 @@ impl Parser {
     }
 
     /// Parse. At the moment, in case of an error, the parser becomes invalid and needs to be recreated.
-    pub fn parse_yet(&mut self, buf: &[u8], parse_settings: &ParseHttpRequestSettings) -> Result<Vec<u8>, RequestError> {
+    pub fn parse_yet(&mut self, buf: &[u8], parse_settings: &ParseHttpRequestSettings) -> Result<(Request, Vec<u8>), RequestError> {
         let prev_idx = self.request.raw.len();
         self.request.raw.extend_from_slice(buf);
 
@@ -220,14 +220,13 @@ impl Parser {
             let surplus = self.request.raw[request_len..].to_vec();
             self.request.raw.truncate(request_len);
 
-            return Ok(surplus);
+            let mut new_request = Request::new();
+            std::mem::swap(&mut new_request, &mut self.request);
+
+            return Ok((new_request, surplus));
         }
 
         Err(RequestError::Partial)
-    }
-
-    pub fn restart(&mut self) {
-        self.request = Request::new();
     }
 
     fn header_is_connection_type(&self, header: &Header) -> Option<ConnectionType> {
@@ -323,26 +322,25 @@ mod tests {
 
         let mut parser = Parser::new();
         let request_str = "GET / HTTP/1.1\r\nConnection: keep-alive\r\n\r\n";
-        if let Ok(surplus) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
+        if let Ok((_request, surplus)) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
             assert!(surplus.is_empty());
         } else {
             assert!(false);
         }
 
-        parser.restart();
+        let mut parser = Parser::new();
 
         let request_str = "GET / HTTP/1.1\r\nConnection: keep-alive\r\n\r\naaa";
-        if let Ok(surplus) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
+        if let Ok((_request, surplus)) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
             assert!(surplus.len() == 3);
         } else {
             assert!(false);
         }
 
-        parser.restart();
+        let mut parser = Parser::new();
 
         let request_str = "GET /index HTTP/1.1\r\n\r\n";
-        if let Ok(_) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
-            let request = &parser.request;
+        if let Ok((request, _)) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
             assert_eq!(request.method(), "GET");
             assert_eq!(request.path(), "/index");
             assert_eq!(request.raw_query(), b"");
@@ -352,11 +350,10 @@ mod tests {
             assert!(false);
         }
 
-        parser.restart();
+        let mut parser = Parser::new();
 
         let request_str = "POST /index?a=1&b=2;c=3 HTTP/1.0\r\nConnection: keep-alive\r\n\r\n";
-        if let Ok(_) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
-            let request = &parser.request;
+        if let Ok((request, _)) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
             assert_eq!(request.method(), "POST");
             assert_eq!(request.path(), "/index");
             assert_eq!(request.raw_query(), b"a=1&b=2;c=3");
@@ -366,11 +363,10 @@ mod tests {
             assert!(false);
         }
 
-        parser.restart();
+        let mut parser = Parser::new();
 
         let request_str = "POST / HTTP/1.0\r\nConnection: keep-alive\r\nTest: some\r\n\r\n";
-        if let Ok(_) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
-            let request = &parser.request;
+        if let Ok((request, _)) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
             assert_eq!(
                 request.headers,
                 vec![
@@ -385,28 +381,24 @@ mod tests {
             assert!(false);
         }
 
-        parser.restart();
+        let mut parser = Parser::new();
 
         let request_str = "";
         if parser.parse_yet(request_str.as_bytes(), &parse_settings).is_ok() {
             assert!(false);
         }
 
-        parser.restart();
+        let mut parser = Parser::new();
 
         let request_str = "/index?a=1&b=2;c=3 HTTP/1.0\r\nConnection: keep-alive\r\n\r\n";
         if parser.parse_yet(request_str.as_bytes(), &parse_settings).is_ok() {
             assert!(false);
         }
 
-        parser.restart();
-
         let request_str = "GET /ws /index?a=1&b=2;c=3 HTTP/1.0\r\nConnection: keep-alive\r\n\r\n";
         if Parser::new().parse_yet(request_str.as_bytes(), &parse_settings).is_ok() {
             assert!(false);
         }
-
-        parser.restart();
 
         // usupported protocol
         let request_str = "GET / HTTP/1.5\r\n\r\n";
