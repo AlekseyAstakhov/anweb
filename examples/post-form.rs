@@ -30,16 +30,15 @@ fn on_request(request: Request) -> Result<(), Box<dyn std::error::Error>> {
                 if request.has_post_form() {
                     // Read content of the request.
                     let mut content = vec![];
-                    let cloned_request = request.clone();
-                    request.read_content(move |data, done| {
+                    request.read_content(move |data, request| {
                         // Collect content chunks.
                         content.extend_from_slice(data);
                         // When all chunks received
-                        if done {
+                        if let Some(request) = request {
                             // Parse content data as query.
                             let form = parse_query(&content);
                             let response_body = format!("Form: {:?}", form);
-                            cloned_request.response(200).text(&response_body).send();
+                            request.response(200).text(&response_body).send();
                         }
 
                         Ok(())

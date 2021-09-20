@@ -168,10 +168,11 @@ impl TcpClient {
 
         let (content, surplus) = data.split_at(mid);
         self.already_read_content_len += content.len();
-        let done = self.already_read_content_len >= self.content_len;
+        let complete = self.already_read_content_len >= self.content_len;
 
-        if let Some(content_callback) = &mut *content_callback {
-            if content_callback(content, done).is_err() {
+        if let Some((content_callback, request)) = &mut *content_callback {
+            let request = if complete { request.take() } else { None };
+            if content_callback(content, request).is_err() {
                 self.tcp_session.disconnect();
             }
         }
@@ -180,7 +181,7 @@ impl TcpClient {
             return;
         }
 
-        if done {
+        if complete {
             *content_callback = None;
 
             self.content_len = 0;
@@ -195,7 +196,7 @@ impl TcpClient {
         }
     }
 
-    fn on_websocket_read(&mut self, data: &[u8], settings: &Settings) {
+    fn  on_websocket_read(&mut self, data: &[u8], settings: &Settings) {
         match self.websocket_parser.parse_yet(data, settings.websocket_payload_limit) {
             Ok(result) => {
                 if let Some((frame, surplus)) = result {

@@ -29,8 +29,7 @@ fn on_request(request: Request) -> Result<(), Box<dyn std::error::Error>> {
             if request.method() == "POST" {
                 let mut multipart = MultipartParser::new(&request)?;
                 let mut response_body = String::new();
-                let cloned_request = request.clone();
-                request.read_content(move |data, done| {
+                request.read_content(move |data, complete| {
                     multipart.push(data, |ev| {
                         match ev {
                             MultipartParserEvent::Disposition(disposition) => {
@@ -43,8 +42,8 @@ fn on_request(request: Request) -> Result<(), Box<dyn std::error::Error>> {
                         }
                     })?;
 
-                    if done {
-                        cloned_request.response(200).text(&response_body).send();
+                    if let Some(request) = complete {
+                        request.response(200).text(&response_body).send();
                     }
 
                     Ok(())

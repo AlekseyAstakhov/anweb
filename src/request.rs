@@ -1,7 +1,7 @@
 use crate::cookie::{parse_cookie, CookieOfRequst};
 use crate::query::{parse_query, Query};
 use std::str::from_utf8;
-use crate::tcp_session::{InnerTcpSession, ContentIsRead};
+use crate::tcp_session::{InnerTcpSession, ContentIsComplite};
 use std::sync::Arc;
 use crate::websocket_session::{WebsocketSession, WebsocketResult, WebsocketError};
 use crate::websocket;
@@ -36,7 +36,6 @@ pub struct ParsedRequest {
 }
 
 /// HTTP request like "GET /?abc=123 HTTP/1.1\r\nConnection: keep-alive\r\n\r\n".
-#[derive(Clone)]
 pub struct Request {
     pub(crate) parsed_request: ParsedRequest,
     pub(crate) tcp_session: Arc<InnerTcpSession>,
@@ -326,10 +325,12 @@ impl Request {
     }
 
     /// Read raw http content (this is what is after headers).
-    pub fn read_content(self, callback: impl FnMut(&[u8], ContentIsRead) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
-        if let Ok(mut content_callback) = self.tcp_session.content_callback.lock() {
-            *content_callback = Some(Box::new(callback));
+    pub fn read_content(self, callback: impl FnMut(&[u8], ContentIsComplite) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
+        let tcp_session = self.tcp_session.clone();
+        if let Ok(mut content_callback) = tcp_session.content_callback.lock() {
+            *content_callback = Some((Box::new(callback), Some(self)));
         }
+        drop(tcp_session);
     }
 
     /// Begin work with websocket. Contains vector with response to handshake and custom data, if the vector is empty then server will make handshake itself.

@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::io;
 use std::io::{ErrorKind, Read, Write};
 use std::net::SocketAddr;
+use crate::request::Request;
 
 /// Client connection to the server.
 #[derive(Clone)]
@@ -210,7 +211,7 @@ impl Write for TcpSession {
 }
 
 /// It's use in load content callback for inform about finish of reading.
-pub type ContentIsRead = bool;
+pub type ContentIsComplite = Option<Request>;
 
 /// Private data of client.
 pub(crate) struct InnerTcpSession {
@@ -231,7 +232,7 @@ pub(crate) struct InnerTcpSession {
     pub(crate) is_http_mode: Arc<AtomicBool>,
 
     /// Callback function that is called when content of HTTP request is fully received or error receiving it.
-    pub(crate) content_callback: Mutex<Option<Box<dyn FnMut(&[u8]/*data part*/, ContentIsRead) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
+    pub(crate) content_callback: Mutex<Option<(Box<dyn FnMut(&[u8]/*data part*/, ContentIsComplite) -> Result<(), Box<dyn std::error::Error>> + Send>, Option<Request>)>>,
     /// Callback function that is called when a new websocket frame is received or error receiving it.
     pub(crate) websocket_callback: Mutex<Option<Box<dyn FnMut(WebsocketResult, WebsocketSession) -> Result<(), WebsocketError> + Send>>>,
 
