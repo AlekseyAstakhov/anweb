@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     server.run(move |server_event| {
         if let Event::Connected(tcp_session) = server_event {
             let users = users.clone();
-            tcp_session.upgrade_to_http(move |http_result| {
+            tcp_session.to_http(move |http_result| {
                 let request = http_result?;
                 if let Some(session_id) = session_id_from_request(&request) {
                     if is_logged(&session_id, &users) {

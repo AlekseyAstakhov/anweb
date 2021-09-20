@@ -41,7 +41,7 @@ impl TcpSession {
     }
 
     /// Switch to HTTP mode. Set a callback function that is called when a new HTTP request is received or error receiving it.
-    pub fn upgrade_to_http(&self, request_or_error_callback: impl FnMut(HttpResult) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
+    pub fn to_http(&self, request_or_error_callback: impl FnMut(HttpResult) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
         if let Ok(mut http_request_callback) = self.inner.http_request_callback.lock() {
             *http_request_callback = Some(Box::new(request_or_error_callback));
             self.inner.is_http_mode.store(true, Ordering::SeqCst);

@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match server_event {
             server::Event::Connected(tcp_session) => {
                 let chat = chat.clone();
-                tcp_session.upgrade_to_http(move |http_result| {
+                tcp_session.to_http(move |http_result| {
                     let mut request = http_result?;
                     match request.path() {
                         "/" => {
