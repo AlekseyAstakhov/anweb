@@ -39,14 +39,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match server_event {
             server::Event::Connected(tcp_session) => {
                 let chat = chat.clone();
-                tcp_session.upgrade_to_http(move |http_result, mut http_session| {
-                    let request = http_result?;
+                tcp_session.upgrade_to_http(move |http_result| {
+                    let mut request = http_result?;
                     match request.path() {
                         "/" => {
-                            http_session.response(200).html(INDEX_HTML).send(&request);
+                            request.response(200).html(INDEX_HTML).send();
                         }
                         "/ws" => {
-                            let mut handshake_response = handshake_response(&request)?;
+                            let mut handshake_response = handshake_response(&request.parsed_reauest())?;
                             // give current chat
                             let messages = chat.messages.lock().unwrap();
                             for msg in messages.iter() {
@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
 
                             let cloned_chat = chat.clone();
-                            let websocket = http_session.accept_websocket(&request, handshake_response, move |received_frame, _| {
+                            let websocket = request.accept_websocket(handshake_response, move |received_frame, _| {
                                 let received_frame = received_frame?;
                                 on_websocket_frame(&received_frame, &cloned_chat);
                                 Ok(())
@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             users.insert(websocket.id(), websocket.clone());
                         }
                         _ => {
-                            http_session.response(404).text("404 page not found").send(&request);
+                            request.response(404).text("404 page not found").send();
                         }
                     }
 

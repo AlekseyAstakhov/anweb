@@ -1,4 +1,3 @@
-use crate::http_session::HttpSession;
 use crate::mime::mime_type_by_extension;
 use crate::request::Request;
 use deflate::{deflate_bytes, deflate_bytes_gzip};
@@ -101,7 +100,7 @@ impl StaticFiles {
     }
 
     /// Send response with file content to the client.
-    pub fn response(&self, path: &str, request: &Request, http_session: &HttpSession) -> io::Result<()> {
+    pub fn response(&self, path: &str, request: &Request) -> io::Result<()> {
         let mut result = Ok(());
 
         self.get(path, |static_file| {
@@ -132,14 +131,14 @@ impl StaticFiles {
                              {}\
                              {}\
                              \r\n",
-                            request.version.to_string_for_response(),
-                            http_session.rfc7231_date_string(),
-                            crate::response::connection_str_by_request(request),
+                            request.version().to_string_for_response(),
+                            request.rfc7231_date_string(),
+                            crate::response::connection_str_by_request(request.parsed_reauest()),
                             if static_file.last_modified_rfc7231.is_empty() { "".to_string() } else { format!("Last-Modified: {}\r\n", static_file.last_modified_rfc7231) },
                             if static_file.etag.is_empty() { "".to_string() } else { format!("ETag: {}\r\n", static_file.etag) }
                         ));
 
-                        http_session.response_raw(&response);
+                        request.response_raw(&response);
                         return;
                     }
 
@@ -169,9 +168,9 @@ impl StaticFiles {
                          Content-Length: {}\r\n\
                          Content-Type: {}\r\n\
                          \r\n",
-                        request.version.to_string_for_response(),
-                        http_session.rfc7231_date_string(),
-                        crate::response::connection_str_by_request(request),
+                        request.version().to_string_for_response(),
+                        request.rfc7231_date_string(),
+                        crate::response::connection_str_by_request(request.parsed_reauest()),
                         content_header,
                         if static_file.last_modified_rfc7231.is_empty() { "".to_string() } else { format!("Last-Modified: {}\r\n", static_file.last_modified_rfc7231) },
                         if static_file.etag.is_empty() { "".to_string() } else { format!("ETag: {}\r\n", static_file.etag) },
@@ -181,10 +180,10 @@ impl StaticFiles {
 
                     if content.len() < self.united_response_limit {
                         response.extend(&content[..]);
-                        http_session.response_raw(&response);
+                        request.response_raw(&response);
                     } else {
-                        http_session.response_raw(&response);
-                        http_session.response_raw_arc(&content);
+                        request.response_raw(&response);
+                        request.response_raw_arc(&content);
                     }
                 }
                 None => {

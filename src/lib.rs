@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod tcp_session;
-pub mod http_session;
+pub mod http_result;
 pub mod websocket_session;
 pub mod cookie;
 pub mod tls;

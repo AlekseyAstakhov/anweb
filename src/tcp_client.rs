@@ -1,5 +1,5 @@
-use crate::http_session::{HttpError, HttpSession};
-use crate::request::{ConnectionType, HttpVersion, Request, RequestError};
+use crate::http_result::HttpError;
+use crate::request::{ConnectionType, HttpVersion, Request, RequestError, ParsedRequest};
 use crate::request_parser::{ParseHttpRequestSettings, Parser};
 use crate::tcp_session::TcpSession;
 use crate::websocket;
@@ -104,8 +104,8 @@ impl TcpClient {
         }
 
         match self.request_parser.parse_yet(data, &settings.parse_http_request_settings) {
-            Ok((request, surplus)) => {
-                self.process_request(request, surplus, settings);
+            Ok((parsed_request, surplus)) => {
+                self.process_parsed_request(parsed_request, surplus, settings);
             }
             Err(parse_err) => {
                 match parse_err {
@@ -121,13 +121,13 @@ impl TcpClient {
         }
     }
 
-    fn process_request(&mut self, request: Request, surplus: Vec<u8>, settings: &Settings) {
-        let need_disconnect_after_response = need_close_by_version_and_connection(&request);
+    fn process_parsed_request(&mut self, parsed_request: ParsedRequest, surplus: Vec<u8>, settings: &Settings) {
+        let need_disconnect_after_response = need_close_by_version_and_connection(&parsed_request);
         self.tcp_session.inner.need_disconnect_after_http_response.store(need_disconnect_after_response, Ordering::SeqCst);
 
-        let content_len = request.content_len;
+        let content_len = parsed_request.content_len();
 
-        self.tcp_session.call_http_callback(Ok(request));
+        self.tcp_session.call_http_callback(Ok(Request { parsed_request, tcp_session: self.tcp_session.inner.clone() }));
 
         let content_callback = self.tcp_session.inner.content_callback.lock()
             .unwrap_or_else(|err| { unreachable!(err) });
@@ -171,7 +171,7 @@ impl TcpClient {
         let done = self.already_read_content_len >= self.content_len;
 
         if let Some(content_callback) = &mut *content_callback {
-            if content_callback(content, done, HttpSession { inner: self.tcp_session.inner.clone() }).is_err() {
+            if content_callback(content, done).is_err() {
                 self.tcp_session.disconnect();
             }
         }
@@ -236,14 +236,14 @@ impl Default for Settings {
 }
 
 /// Determines whether to close the connection after responding by the content of the request.
-fn need_close_by_version_and_connection(request: &Request) -> bool {
-    if let Some(connection_type) = &request.connection_type {
+fn need_close_by_version_and_connection(request: &ParsedRequest) -> bool {
+    if let Some(connection_type) = &request.connection_type() {
         if let ConnectionType::Close = connection_type {
             return true;
         }
     } else {
         // by default in HTTP/1.0 connection close but in HTTP/1.1 keep-alive
-        if let HttpVersion::Http1_0 = request.version {
+        if let HttpVersion::Http1_0 = request.version() {
             return true;
         }
     }
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn test_version() {
-        let mut request = Request::new();
+        let mut request = ParsedRequest::new();
         request.version = HttpVersion::Http1_0;
         request.connection_type = Some(ConnectionType::Close);
         assert_eq!(need_close_by_version_and_connection(&request), true);

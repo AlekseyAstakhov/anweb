@@ -1,7 +1,6 @@
 use anweb::query::parse_query;
 use anweb::server::{Event, Server};
 use anweb::request::Request;
-use anweb::http_session::HttpSession;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = ([0, 0, 0, 0], 8080).into();
@@ -9,8 +8,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = Server::new(&addr)?;
     server.run(move |server_event| {
         if let Event::Connected(tcp_session) = server_event {
-            tcp_session.upgrade_to_http(|http_result, http_session| {
-                on_request(&http_result?, &http_session)
+            tcp_session.upgrade_to_http(|http_result| {
+                on_request(http_result?)
             });
         }
     })?;
@@ -18,20 +17,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn on_request(request: &Request, http_session: &HttpSession) -> Result<(), Box<dyn std::error::Error>> {
-    match request.path() {
+fn on_request(request: Request) -> Result<(), Box<dyn std::error::Error>> {
+    let path = request.path().clone();
+    match path {
         "/" => {
             if request.method() == "GET" {
-                http_session.response(200).html(INDEX_HTML).send(&request);
+                request.response(200).html(INDEX_HTML).send();
             }
         }
         "/form" => {
             if request.method() == "POST" {
                 if request.has_post_form() {
-                    let request = (*request).clone();
                     // Read content of the request.
                     let mut content = vec![];
-                    http_session.read_content(move |data, done, http_session| {
+                    let cloned_request = request.clone();
+                    request.read_content(move |data, done| {
                         // Collect content chunks.
                         content.extend_from_slice(data);
                         // When all chunks received
@@ -39,18 +39,18 @@ fn on_request(request: &Request, http_session: &HttpSession) -> Result<(), Box<d
                             // Parse content data as query.
                             let form = parse_query(&content);
                             let response_body = format!("Form: {:?}", form);
-                            http_session.response(200).text(&response_body).send(&request);
+                            cloned_request.response(200).text(&response_body).send();
                         }
 
                         Ok(())
                     });
                 } else {
-                    http_session.response(422).text("Wrong form").send(&request);
+                    request.response(422).text("Wrong form").send();
                 }
             }
         }
         _ => {
-            http_session.response(404).text("404 page not found").send(&request);
+            request.response(404).text("404 page not found").send();
         }
     }
 

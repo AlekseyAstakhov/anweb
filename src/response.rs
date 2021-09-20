@@ -1,11 +1,10 @@
-use crate::request::{ConnectionType, HttpVersion, Request};
-use crate::http_session::HttpSession;
+use crate::request::{ConnectionType, HttpVersion, Request, ParsedRequest};
 
 pub struct Response<'a, 'b, 'c, 'd, 'e, 'f> {
     code: u16,
     content: &'a[u8],
     content_type: &'b str,
-    http_session: &'c HttpSession,
+    request: &'c Request,
     /// If Some - Connection header will be set from value.
     /// If None - Connection header will be set by request Connection header and HTTP version.
     keep_alive_connection: Option<bool>,
@@ -18,7 +17,7 @@ pub struct Response<'a, 'b, 'c, 'd, 'e, 'f> {
 }
 
 impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
-    pub fn send(&self, request: &Request) {
+    pub fn send(&self) {
         let mut response = Vec::from(format!(
             "{} {}\r\n\
          Date: {}\r\n\
@@ -29,10 +28,10 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
          {}\
          {}{}{}\
          \r\n",
-            request.version.to_string_for_response(),
+            self.request.version().to_string_for_response(),
             http_status_code_with_name(self.code),
-            self.http_session.rfc7231_date_string(),
-            self.connection_str(&request),
+            self.request.rfc7231_date_string(),
+            self.connection_str(&self.request.parsed_reauest()),
             self.content.len(),
             self.content_type,
             if let Some(headers) = self.headers { headers } else { "" },
@@ -44,7 +43,7 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
 
         response.extend_from_slice(self.content);
 
-        self.http_session.response_raw(&response);
+        self.request.response_raw(&response);
     }
 
     /// Set any type content.
@@ -110,11 +109,11 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
         self
     }
 
-    pub(crate) fn new(code: u16, http_session: &'c HttpSession) -> Self {
+    pub(crate) fn new(code: u16, request: &'c Request) -> Self {
         Response {
             code,
             content: b"",
-            http_session,
+            request,
             content_type: "",
             keep_alive_connection: None,
             headers: None,
@@ -123,7 +122,7 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
         }
     }
 
-    fn connection_str<'r>(&self, request: &'r Request) -> &'static str {
+    fn connection_str<'r>(&self, request: &'r ParsedRequest) -> &'static str {
         if let Some(keep_alive_connection) = self.keep_alive_connection {
             if keep_alive_connection {
                 "Connection: keep_alive\r\n"
@@ -136,8 +135,8 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
     }
 }
 
-pub fn connection_str_by_request(request: &Request) -> &'static str {
-    if let Some(connection_type) = &request.connection_type {
+pub fn connection_str_by_request(request: &ParsedRequest) -> &'static str {
+    if let Some(connection_type) = &request.connection_type() {
         match connection_type {
             ConnectionType::KeepAlive => "Connection: keep_alive\r\n",
             _ => "Connection: close\r\n",

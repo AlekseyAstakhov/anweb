@@ -20,11 +20,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     server.run(move |server_event| {
         if let Event::Connected(tcp_session) = server_event {
             let pool = pool.clone();
-            tcp_session.upgrade_to_http(move |http_result, http_session| {
+            tcp_session.upgrade_to_http(move |http_result| {
                 let request = http_result?;
                 match request.path() {
                     "/" => {
-                        http_session.response(200).html(INDEX_HTML).send(&request);
+                        request.response(200).html(INDEX_HTML).send();
                     }
                     "/long" => {
                         let pool = pool.lock().unwrap();
@@ -32,11 +32,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         pool.execute(move || {
                             // emitting long operation using sleep
                             sleep(Duration::from_secs(10));
-                            http_session.response(200).html("Complete").send(&request);
+                            request.response(200).html("Complete").send();
                         });
                     }
                     _ => {
-                        http_session.response(404).text("404 page not found").send(&request);
+                        request.response(404).text("404 page not found").send();
                     }
                 }
 

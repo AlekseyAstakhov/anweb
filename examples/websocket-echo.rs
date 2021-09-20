@@ -10,16 +10,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     server.run(|server_event| {
         if let server::Event::Connected(tcp_session) = server_event {
-            tcp_session.upgrade_to_http(|http_result, mut http_session| {
-                let request = http_result?;
+            tcp_session.upgrade_to_http(|http_result| {
+                let mut request = http_result?;
                 match request.path() {
                     "/" => {
-                        http_session.response(200).html(INDEX_HTML).send(&request);
+                        request.response(200).html(INDEX_HTML).send();
                     }
                     "/ws" => {
                         // Try process websocket handshake request and switch connection
                         // to websocket mode, it will no longer process http requests.
-                        http_session.accept_websocket(&request, vec![], |websocket_result, mut websocket_session| {
+                        request.accept_websocket(vec![], |websocket_result, mut websocket_session| {
                             // This callback will be called if a new frame arrives from the client
                             // or an error occurs.
                             let received_frame = websocket_result?;
@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         })?;
                     }
                     _ => {
-                        http_session.response(404).text("404 page not found").send(&request);
+                        request.response(404).text("404 page not found").send();
                     }
                 }
 

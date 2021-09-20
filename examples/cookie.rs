@@ -7,13 +7,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = Server::new(&addr)?;
     server.run(move |server_event| {
         if let Event::Connected(tcp_session) = server_event {
-            tcp_session.upgrade_to_http(move |http_result, http_session| {
+            tcp_session.upgrade_to_http(move |http_result| {
                 let request = http_result?;
                 let cookie_name = "test";
 
                 // if cookie with "test" name are already installed on the client (browser)
                 if let Some(_) = request.cookies().iter().find(|cookie| cookie.name == cookie_name) {
-                    http_session.response(200).html(HTML_WHEN_COOKIE_RECEIVED).send(&request);
+                    request.response(200).html(HTML_WHEN_COOKIE_RECEIVED).send();
                 } else {
                     let cookie = Cookie {
                         name: "test",
@@ -27,10 +27,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }.to_string();
 
                     // if cookies are not installed, then install it
-                    http_session.response(200)
+                    request.response(200)
                         .cookies(&cookie)
                         .html(HTML_WHEN_NO_COOKIE)
-                        .send(&request);
+                        .send();
                 }
 
                 Ok(())

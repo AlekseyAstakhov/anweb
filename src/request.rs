@@ -1,10 +1,17 @@
 use crate::cookie::{parse_cookie, CookieOfRequst};
 use crate::query::{parse_query, Query};
 use std::str::from_utf8;
+use crate::tcp_session::{InnerTcpSession, ContentIsRead};
+use std::sync::Arc;
+use crate::websocket_session::{WebsocketSession, WebsocketResult, WebsocketError};
+use crate::websocket;
+use std::io::ErrorKind;
+use crate::response::Response;
+use std::net::SocketAddr;
+use std::io;
 
-/// HTTP request like "GET /?abc=123 HTTP/1.1\r\nConnection: keep-alive\r\n\r\n".
-#[derive(Debug, Clone)]
-pub struct Request {
+#[derive(Clone)]
+pub struct ParsedRequest {
     /// Raw buffer of request without content.
     pub(crate) raw: Vec<u8>,
     /// Indices of method in raw buffer ('raw').
@@ -24,9 +31,15 @@ pub struct Request {
     /// Value of header "Content-length", if no header then None.
     pub(crate) content_len: Option<usize>,
 
-
     /// Need for return $str from path() function
     pub(crate) decoded_path: String,
+}
+
+/// HTTP request like "GET /?abc=123 HTTP/1.1\r\nConnection: keep-alive\r\n\r\n".
+#[derive(Clone)]
+pub struct Request {
+    pub(crate) parsed_request: ParsedRequest,
+    pub(crate) tcp_session: Arc<InnerTcpSession>,
 }
 
 /// Parsed header.
@@ -85,9 +98,10 @@ pub enum RequestError {
     ContentLengthParseError,
 }
 
-impl Default for Request {
-    fn default() -> Self {
-        Request {
+impl ParsedRequest {
+    /// Creates a request with undefined fields.
+    pub fn new() -> Self {
+        ParsedRequest {
             method_end_index: 0,
             path_indices: (0, 0),
             raw_query_indices: (0, 0),
@@ -101,12 +115,7 @@ impl Default for Request {
     }
 }
 
-impl Request {
-    /// Creates a request with undefined fields.
-    pub fn new() -> Self {
-        Request::default()
-    }
-
+impl ParsedRequest {
     /// The method slice in request buffer converted to utf8 string. Empty if invalid utf8 string.
     pub fn method(&self) -> &str {
         if self.method_end_index > self.raw.len() {
@@ -212,6 +221,151 @@ impl Request {
         }
 
         &self.raw[self.raw_query_indices.0..self.raw_query_indices.1]
+    }
+}
+
+impl Request {
+    /// The method slice in request buffer converted to utf8 string. Empty if invalid utf8 string.
+    pub fn method(&self) -> &str {
+        self.parsed_request.method()
+    }
+
+    /// Path. Decoded. Empty if no valid utf-8 or decoding error.
+    pub fn path(&self) -> &str {
+        self.parsed_request.path()
+    }
+
+    /// The parsed query to names and values array.
+    pub fn query(&self) -> Query {
+        self.parsed_request.query()
+    }
+
+    /// Header value by name.
+    pub fn header_value(&self, name: &str) -> Option<&str> {
+        self.parsed_request.header_value(name)
+    }
+
+    /// Version "HTTP/1.0" or "HTTP/1.1".
+    pub fn version(&self) -> &HttpVersion {
+        self.parsed_request.version()
+    }
+    /// Headers.
+    pub fn headers(&self) -> &Vec<Header> {
+        &self.parsed_request.headers()
+    }
+
+    /// Value of header "Connection: keep-alive/close", if no header then None
+    pub fn connection_type(&self) -> &Option<ConnectionType> {
+        &self.parsed_request.connection_type()
+    }
+    /// Value of header "Content-length", if no header then None.
+    pub fn content_len(&self) -> Option<usize> {
+        self.parsed_request.content_len()
+    }
+
+    /// Cookies FROM FIRST HEADER "Cookie". RFC 6265, 5.4. "The Cookie Header: When the user agent generates an HTTP request, the user agent MUST NOT attach more than one Cookie header field".
+    pub fn cookies(&self) -> Vec<CookieOfRequst> {
+        self.parsed_request.cookies()
+    }
+
+    /// Check existence header Content-Len, Content-Type and type application/x-www-form-urlencoded.
+    /// No check that method is necessarily "POST", "PUT" or "PATCH".
+    pub fn has_post_form(&self) -> bool {
+        self.parsed_request.has_post_form()
+    }
+
+    /// Raw buffer of request.
+    pub fn raw(&self) -> &[u8] {
+        self.parsed_request.raw()
+    }
+
+    /// Method as raw bytes in request buffer.
+    pub fn raw_method(&self) -> &[u8] {
+        self.parsed_request.raw_method()
+    }
+
+    /// Path as raw bytes in request buffer.
+    pub fn raw_path(&self) -> &[u8] {
+        self.parsed_request.raw_path()
+    }
+
+    /// Return reference to request data structure.
+    pub fn parsed_reauest(&self) -> &ParsedRequest {
+        &self.parsed_request
+    }
+
+
+    /// Query slice in request buffer. Empty if no query.
+    pub fn raw_query(&self) -> &[u8] {
+        self.parsed_request.raw_query()
+    }
+
+    /// Client id on server in connection order.
+    pub fn id(&self) -> u64 {
+        self.tcp_session.id()
+    }
+
+    /// Net address of client, either IPv4 or IPv6.
+    pub fn addr(&self) -> &SocketAddr {
+        &self.tcp_session.addr
+    }
+
+    /// Return response builder.
+    pub fn response(&self, code: u16) -> Response {
+        Response::new(code, &self)
+    }
+
+    /// Send raw data.
+    pub fn response_raw(&self, data: &[u8]) {
+        self.tcp_session.send(data);
+    }
+
+    /// Send raw shared data.
+    pub fn response_raw_arc(&self, data: &Arc<Vec<u8>>) {
+        self.tcp_session.send_arc(data);
+    }
+
+    /// Read raw http content (this is what is after headers).
+    pub fn read_content(self, callback: impl FnMut(&[u8], ContentIsRead) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
+        if let Ok(mut content_callback) = self.tcp_session.content_callback.lock() {
+            *content_callback = Some(Box::new(callback));
+        }
+    }
+
+    /// Begin work with websocket. Contains vector with response to handshake and custom data, if the vector is empty then server will make handshake itself.
+    pub fn accept_websocket(&mut self, payload: Vec<u8>, callback: impl FnMut(WebsocketResult, WebsocketSession) -> Result<(), WebsocketError> + Send + 'static) -> Result<WebsocketSession, io::Error> {
+        if payload.is_empty() {
+            match websocket::handshake_response(&self.parsed_request) {
+                Ok(response) => {
+                    self.tcp_session.send(&response);
+                }
+                Err(_) => {
+                    return Err(io::Error::new(ErrorKind::Other, "Websocket handshake error"));
+                }
+            }
+        } else {
+            self.tcp_session.send(&payload);
+        }
+
+        if let Ok(mut websocket_callback) = self.tcp_session.websocket_callback.lock() {
+            *websocket_callback = Some(Box::new(callback));
+        }
+
+        Ok(WebsocketSession { inner: self.tcp_session.clone() })
+    }
+
+    /// Close of client socket. After clossing will be generated `sever::Event::Disconnected`.
+    pub fn disconnect(&self) {
+        self.tcp_session.disconnect()
+    }
+
+    /// Prepared rfc7231 string for http responses, update once per second.
+    pub fn rfc7231_date_string(&self) -> String {
+        if let Ok(http_date_string) = self.tcp_session.http_date_string.read() {
+            http_date_string.clone()
+        } else {
+            String::new()
+        }
     }
 }
 

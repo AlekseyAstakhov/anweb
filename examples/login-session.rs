@@ -1,4 +1,4 @@
-use anweb::http_session::{HttpSession, HttpError};
+use anweb::http_result::HttpError;
 use anweb::cookie::Cookie;
 use anweb::query::{parse_query, Query};
 use anweb::request::Request;
@@ -18,16 +18,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     server.run(move |server_event| {
         if let Event::Connected(tcp_session) = server_event {
             let users = users.clone();
-            tcp_session.upgrade_to_http(move |http_result, http_session| {
+            tcp_session.upgrade_to_http(move |http_result| {
                 let request = http_result?;
                 if let Some(session_id) = session_id_from_request(&request) {
                     if is_logged(&session_id, &users) {
-                        response_for_logged_user(&http_session, &request, &users, &session_id);
+                        response_for_logged_user(&request, &users, &session_id);
                         return Ok(());
                     }
                 }
 
-                response_for_unlogged_user(&http_session, &request, &users)?;
+                response_for_unlogged_user(request, &users)?;
 
                 Ok(())
             });
@@ -37,40 +37,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn response_for_unlogged_user(http_session: &HttpSession, request: &Request, users: &Users) -> Result<(), HttpError> {
+fn response_for_unlogged_user(request: Request, users: &Users) -> Result<(), HttpError> {
     match request.path() {
         "/" => {
-            http_session.response(200).html(LOGIN_PAGE).send(&request);
+            request.response(200).html(LOGIN_PAGE).send();
         }
         "/login" => {
             if let Some(content_len) = request.content_len() {
                 if content_len < 256 {
                     let users = users.clone();
-                    let request = request.clone();
                     let mut content = vec![];
-                    http_session.read_content(move |data, done, mut http_session| {
+                    let cloned_request = request.clone();
+                    request.read_content(move |data, done| {
                         content.extend_from_slice(data);
                         if done {
                             let form = parse_query(&content);
-                            response_to_login_form(&mut http_session, &request, &form, &users);
+                            response_to_login_form(&cloned_request, &form, &users);
                         }
                         Ok(())
                     })
                 } else {
-                    http_session.response(400).text("A lot of data for login and password. Bye bye.").send(&request);
-                    http_session.disconnect();
+                    request.response(400).text("A lot of data for login and password. Bye bye.").send();
+                    request.disconnect();
                 }
             }
         }
         _ => {
-            http_session.response(404).text("404 page not found").send(&request);
+            request.response(404).text("404 page not found").send();
         }
     }
 
     Ok(())
 }
 
-fn response_to_login_form(http_session: &mut HttpSession, request: &Request, query: &Query, users: &Users) {
+fn response_to_login_form(request: &Request, query: &Query, users: &Users) {
     if query.value("login").unwrap_or("".to_string()) == "admin" && query.value("password").unwrap_or("".to_string()) == "admin" {
         let session_id = generate_session_id();
 
@@ -90,17 +90,17 @@ fn response_to_login_form(http_session: &mut HttpSession, request: &Request, que
             secure: false,
         }.to_string();
 
-        http_session.response(303).location("/").cookies(&cookie).send(&request);
+        request.response(303).location("/").cookies(&cookie).send();
         return;
     }
 
-    http_session.response(200).html(AUTHENTICATION_FAILED_PAGE).send(&request);
+    request.response(200).html(AUTHENTICATION_FAILED_PAGE).send();
 }
 
-fn response_for_logged_user(http_session: &HttpSession, request: &Request, users: &Users, session_id: &str) {
+fn response_for_logged_user(request: &Request, users: &Users, session_id: &str) {
     match request.path() {
         "/" => {
-            http_session.response(200).html(LOGGED_USER_PAGE).send(&request);
+            request.response(200).html(LOGGED_USER_PAGE).send();
         }
         "/logout" => {
             if let Ok(mut users) = users.lock() {
@@ -108,10 +108,10 @@ fn response_for_logged_user(http_session: &HttpSession, request: &Request, users
             }
 
             let cookie = Cookie::remove("session_id").to_string();
-            http_session.response(303).location("/").cookies(&cookie).send(&request);
+            request.response(303).location("/").cookies(&cookie).send();
         }
         _ => {
-            http_session.response(404).text("404 page not found").send(&request);
+            request.response(404).text("404 page not found").send();
         }
     }
 }

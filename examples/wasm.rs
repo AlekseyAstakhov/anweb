@@ -12,17 +12,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     server.run(move |server_event| {
         if let Event::Connected(tcp_session) = server_event {
             let wasm_file_data = wasm_file_data.clone();
-            tcp_session.upgrade_to_http(move |http_result, http_session| {
+            tcp_session.upgrade_to_http(move |http_result| {
                 let request = http_result?;
                 match request.path() {
                     "/" => {
-                        http_session.response(200).html(INDEX_HTML).send(&request);
+                        request.response(200).html(INDEX_HTML).send();
                     }
                     "/simple.wasm" => {
-                        http_session.response(200).wasm(&wasm_file_data).send(&request);
+                        request.response(200).wasm(&wasm_file_data).send();
                     }
                     _ => {
-                        http_session.response(404).text("404 page not found").send(&request);
+                        request.response(404).text("404 page not found").send();
                     }
                 }
 

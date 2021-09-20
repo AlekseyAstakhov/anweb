@@ -1,4 +1,4 @@
-use crate::http_session::{HttpSession, HttpResult, HttpError};
+use crate::http_result::{HttpResult, HttpError};
 use crate::websocket_session::{WebsocketSession, WebsocketResult, WebsocketError};
 use rustls::Session;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -40,8 +40,8 @@ impl TcpSession {
         self.inner.disconnect();
     }
 
-    /// Set a callback function that is called when a new HTTP request is received or error receiving it.
-    pub fn upgrade_to_http(&self, request_or_error_callback: impl FnMut(HttpResult, HttpSession) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
+    /// Switch to HTTP mode. Set a callback function that is called when a new HTTP request is received or error receiving it.
+    pub fn upgrade_to_http(&self, request_or_error_callback: impl FnMut(HttpResult) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
         if let Ok(mut http_request_callback) = self.inner.http_request_callback.lock() {
             *http_request_callback = Some(Box::new(request_or_error_callback));
             self.inner.is_http_mode.store(true, Ordering::SeqCst);
@@ -62,7 +62,7 @@ impl TcpSession {
     pub(crate) fn call_http_callback(&self, request: HttpResult) {
         if let Ok(mut callback) = self.inner.http_request_callback.lock() {
             if let Some(callback) = &mut *callback {
-                if callback(request, HttpSession { inner: self.inner.clone() }).is_err() {
+                if callback(request).is_err() {
                     self.disconnect();
                 }
             }
@@ -226,12 +226,12 @@ pub(crate) struct InnerTcpSession {
     tls_session: Option<Mutex<rustls::ServerSession>>,
 
     /// Callback function that is called when a new HTTP request is received or error receiving it.
-    pub(crate) http_request_callback: Mutex<Option<Box<dyn FnMut(HttpResult, HttpSession) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
+    pub(crate) http_request_callback: Mutex<Option<Box<dyn FnMut(HttpResult) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
     /// Sets true when callback is set.
     pub(crate) is_http_mode: Arc<AtomicBool>,
 
     /// Callback function that is called when content of HTTP request is fully received or error receiving it.
-    pub(crate) content_callback: Mutex<Option<Box<dyn FnMut(&[u8]/*data part*/, ContentIsRead, HttpSession) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
+    pub(crate) content_callback: Mutex<Option<Box<dyn FnMut(&[u8]/*data part*/, ContentIsRead) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
     /// Callback function that is called when a new websocket frame is received or error receiving it.
     pub(crate) websocket_callback: Mutex<Option<Box<dyn FnMut(WebsocketResult, WebsocketSession) -> Result<(), WebsocketError> + Send>>>,
 
