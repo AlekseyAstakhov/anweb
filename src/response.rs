@@ -78,11 +78,21 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
         self
     }
 
+    /// Set "Connection" header.
     /// By default connection header set by connection header and http version of request.
     /// If call this function the connection header (keep_alive/close) will be set from this value.
     #[inline(always)]
-    pub fn keep_alive(&mut self, keep_alive: bool) -> &mut Self {
-        self.keep_alive_connection = Some(keep_alive);
+    pub fn keep_alive(&mut self) -> &mut Self {
+        self.keep_alive_connection = Some(true);
+        self
+    }
+
+    /// Set "Connection" header.
+    /// By default connection header set by connection header and http version of request.
+    /// If call this function the connection header (keep_alive/close) will be set from this value.
+    #[inline(always)]
+    pub fn close(&mut self) -> &mut Self {
+        self.keep_alive_connection = Some(false);
         self
     }
 

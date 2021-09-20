@@ -23,37 +23,44 @@ fn on_request(request: Request) -> Result<(), Box<dyn std::error::Error>> {
         "/" => {
             if request.method() == "GET" {
                 request.response(200).html(INDEX_HTML).send();
+                return Ok(());
             }
         }
         "/form" => {
             if request.method() == "POST" {
-                if request.has_post_form() {
-                    // Read content of the request.
-                    let mut content = vec![];
-                    request.read_content(move |data, request| {
-                        // Collect content chunks.
-                        content.extend_from_slice(data);
-                        // When all chunks received
-                        if let Some(request) = request {
-                            // Parse content data as query.
-                            let form = parse_query(&content);
-                            let response_body = format!("Form: {:?}", form);
-                            request.response(200).text(&response_body).send();
-                        }
-
-                        Ok(())
-                    });
-                } else {
-                    request.response(422).text("Wrong form").send();
-                }
+                on_form_post(request);
+                return Ok(());
             }
         }
         _ => {
-            request.response(404).text("404 page not found").send();
         }
     }
 
+    request.response(404).text("404 page not found").send();
+
     Ok(())
+}
+
+fn on_form_post(request: Request) {
+    if request.has_post_form() {
+        // Read content of the request.
+        let mut content = vec![];
+        request.read_content(move |data, request| {
+            // Collect content chunks.
+            content.extend_from_slice(data);
+            // When all chunks received
+            if let Some(request) = request {
+                // Parse content data as query.
+                let form = parse_query(&content);
+                let response_body = format!("Form: {:?}", form);
+                request.response(200).text(&response_body).send();
+            }
+
+            Ok(())
+        });
+    } else {
+        request.response(422).text("Wrong form").close().send();
+    }
 }
 
 const INDEX_HTML: &str = r#"
