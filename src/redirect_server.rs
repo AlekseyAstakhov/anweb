@@ -23,8 +23,7 @@ pub fn run_redirect_server(path: &'static str, server_addr: SocketAddr, num_thre
                 if let server::Event::Connected(tcp_session) = server_event {
                     let path = path.clone();
                     tcp_session.to_http(move |http_request| {
-                        let request = http_request?;
-                        request.response(303).location(&path).close().send();
+                        http_request?.response(303).location(&path).close().send();
                         Ok(())
                     });
                 }
