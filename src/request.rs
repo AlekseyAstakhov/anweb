@@ -309,7 +309,7 @@ impl Request {
         &self.tcp_session.addr
     }
 
-    /// Return response builder.
+    /// Returns response builder.
     pub fn response<'a, 'b, 'c, 'd, 'e>(self, code: u16) -> Response<'a, 'b, 'c, 'd, 'e> {
         Response::new(code, self)
     }

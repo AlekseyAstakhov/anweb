@@ -1,9 +1,13 @@
 use crate::request::{ConnectionType, HttpVersion, Request, ParsedRequest};
 
+/// For build and send HTTP response.
 pub struct Response<'a, 'b, 'c, 'd, 'e> {
+    /// HTTP response code.
     code: u16,
-    content: &'a[u8],
+    /// Value of "Content-Type" header.
     content_type: &'b str,
+    /// Data of HTTP response content.
+    content: &'a[u8],
     /// If Some - Connection header will be set from value.
     /// If None - Connection header will be set by request Connection header and HTTP version.
     keep_alive_connection: Option<bool>,
@@ -14,10 +18,12 @@ pub struct Response<'a, 'b, 'c, 'd, 'e> {
     /// Location header.
     location: Option<&'e str>,
 
+    /// Request. Using for build and send response.
     request: Request,
 }
 
 impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
+    /// Builds response and send it to the client.
     pub fn send(&self) {
         let mut response = Vec::from(format!(
         "{} {}\r\n\
@@ -120,6 +126,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
         self
     }
 
+    /// Returns new response ready to build.
     pub(crate) fn new(code: u16, request: Request) -> Self {
         Response {
             code,
