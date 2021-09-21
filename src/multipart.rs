@@ -7,6 +7,7 @@ pub struct MultipartParser {
 }
 
 impl MultipartParser {
+    /// Returns new multipart parser.
     pub fn new(request: &Request) -> Result<Self, MultipartError> {
         let content_type_val = request.header_value("Content-Type").unwrap_or("");
         if content_type_val.is_empty() {
@@ -35,6 +36,7 @@ impl MultipartParser {
         })
     }
 
+    /// Add data for parsing.
     pub fn push(&mut self, data: &[u8], mut f: impl FnMut(MultipartParserEvent)) -> Result<(), MultipartError> {
         self.buf.extend_from_slice(data);
 
@@ -133,13 +135,18 @@ impl MultipartParser {
     }
 }
 
+/// Disposition of multipart part.
 pub struct Disposition<'a> {
     pub raw: &'a [u8],
 }
 
+/// Event of multipart parser.
 pub enum MultipartParserEvent<'a> {
+    /// New disposition found.
     Disposition(&'a Disposition<'a>),
+    /// Data part. If end false then this part of part.
     Data { data_part: &'a [u8], end: bool },
+    ///  All parts received (last boundary that with "--" postfix found).
     Finished,
 }
 
@@ -151,10 +158,13 @@ enum ParseState {
 
 #[derive(Debug)]
 pub enum MultipartError {
+    /// No "Content-Type" header in HTTP request.
     NoContentTypeHeader,
+    /// No "boundary=" in value of "Content-Type" header.
     NoBoundaryInContentTypeHeader,
+    /// Boundary in value of "Content-Type" header is empty.
     EmptyBoundaryInHeader,
-    // By RFC 2046, boundary must be no longer than 70 characters
+    /// By RFC 2046, boundary must be no longer than 70 characters.
     BoundaryLenLimit { len: usize },
 }
 
