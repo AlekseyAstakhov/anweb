@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let request = http_result?;
                 if let Some(session_id) = session_id_from_request(&request) {
                     if is_logged(&session_id, &users) {
-                        response_for_logged_user(&request, &users, &session_id);
+                        response_for_logged_user(request, &users, &session_id);
                         return Ok(());
                     }
                 }
@@ -51,13 +51,12 @@ fn response_for_unlogged_user(request: Request, users: &Users) -> Result<(), Htt
                         content.extend_from_slice(data);
                         if let Some(request) = complete {
                             let form = parse_query(&content);
-                            response_to_login_form(&request, &form, &users);
+                            response_to_login_form(request, &form, &users);
                         }
                         Ok(())
                     })
                 } else {
-                    request.response(400).text("A lot of data for login and password. Bye bye.").send();
-                    request.disconnect();
+                    request.response(400).text("A lot of data for login and password. Bye bye.").close().send();
                 }
             }
         }
@@ -69,7 +68,7 @@ fn response_for_unlogged_user(request: Request, users: &Users) -> Result<(), Htt
     Ok(())
 }
 
-fn response_to_login_form(request: &Request, query: &Query, users: &Users) {
+fn response_to_login_form(request: Request, query: &Query, users: &Users) {
     if query.value("login").unwrap_or("".to_string()) == "admin" && query.value("password").unwrap_or("".to_string()) == "admin" {
         let session_id = generate_session_id();
 
@@ -96,7 +95,7 @@ fn response_to_login_form(request: &Request, query: &Query, users: &Users) {
     request.response(200).html(AUTHENTICATION_FAILED_PAGE).send();
 }
 
-fn response_for_logged_user(request: &Request, users: &Users, session_id: &str) {
+fn response_for_logged_user(request: Request, users: &Users, session_id: &str) {
     match request.path() {
         "/" => {
             request.response(200).html(LOGGED_USER_PAGE).send();

@@ -310,8 +310,8 @@ impl Request {
     }
 
     /// Return response builder.
-    pub fn response(&self, code: u16) -> Response {
-        Response::new(code, &self)
+    pub fn response<'a, 'b, 'c, 'd, 'e>(self, code: u16) -> Response<'a, 'b, 'c, 'd, 'e> {
+        Response::new(code, self)
     }
 
     /// Send raw data.

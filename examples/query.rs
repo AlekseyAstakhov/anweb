@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         request.response(200).html(INDEX_HTML).send();
                     }
                     "/query" => {
-                        on_query(&request)?;
+                        on_query(request)?;
                     }
                     _ => {
                         request.response(404).text("404 page not found").send();
@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// If "/query" path.
-fn on_query(request: &Request) -> Result<(), std::io::Error> {
+fn on_query(request: Request) -> Result<(), std::io::Error> {
     // Parse query.
     let query = request.query();
     if let Some(first_value) = query.value("first") {

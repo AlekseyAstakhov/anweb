@@ -1,25 +1,26 @@
 use crate::request::{ConnectionType, HttpVersion, Request, ParsedRequest};
 
-pub struct Response<'a, 'b, 'c, 'd, 'e, 'f> {
+pub struct Response<'a, 'b, 'c, 'd, 'e> {
     code: u16,
     content: &'a[u8],
     content_type: &'b str,
-    request: &'c Request,
     /// If Some - Connection header will be set from value.
     /// If None - Connection header will be set by request Connection header and HTTP version.
     keep_alive_connection: Option<bool>,
     /// Extra headers.
-    headers: Option<&'d str>,
+    headers: Option<&'c str>,
     /// Cookies headers.
-    cookies: Option<&'e str>,
+    cookies: Option<&'d str>,
     /// Location header.
-    location: Option<&'f str>,
+    location: Option<&'e str>,
+
+    request: Request,
 }
 
-impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
+impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
     pub fn send(&self) {
         let mut response = Vec::from(format!(
-            "{} {}\r\n\
+        "{} {}\r\n\
          Date: {}\r\n\
          {}\
          Content-Length: {}\r\n\
@@ -100,35 +101,35 @@ impl<'a, 'b, 'c, 'd, 'e, 'f> Response<'a, 'b, 'c, 'd, 'e, 'f> {
     /// Note: must not contain headers "Date", "Content-Length" and "Content-Type" because
     /// they will be set automatically when building the response.
     #[inline(always)]
-    pub fn headers(&mut self, headers: &'d str) -> &mut Self {
+    pub fn headers(&mut self, headers: &'c str) -> &mut Self {
         self.headers = Some(headers);
         self
     }
 
     /// Set Set-Cookie headers.
     #[inline(always)]
-    pub fn cookies(&mut self, cookies: &'e str) -> &mut Self {
+    pub fn cookies(&mut self, cookies: &'d str) -> &mut Self {
         self.cookies = Some(cookies);
         self
     }
 
     /// Set "Location" header value.
     #[inline(always)]
-    pub fn location(&mut self, location: &'f str) -> &mut Self {
+    pub fn location(&mut self, location: &'e str) -> &mut Self {
         self.location = Some(location);
         self
     }
 
-    pub(crate) fn new(code: u16, request: &'c Request) -> Self {
+    pub(crate) fn new(code: u16, request: Request) -> Self {
         Response {
             code,
             content: b"",
-            request,
             content_type: "",
             keep_alive_connection: None,
             headers: None,
             cookies: None,
             location: None,
+            request,
         }
     }
 
