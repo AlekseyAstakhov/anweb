@@ -55,8 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                             let cloned_chat = chat.clone();
                             let websocket = request.accept_websocket(handshake_response, move |received_frame, _| {
-                                let received_frame = received_frame?;
-                                on_websocket_frame(&received_frame, &cloned_chat);
+                                on_websocket_frame(received_frame?, &cloned_chat);
                                 Ok(())
                             })?;
 
