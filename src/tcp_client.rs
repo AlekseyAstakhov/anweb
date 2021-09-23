@@ -1,5 +1,5 @@
 use crate::http_result::HttpError;
-use crate::request::{ConnectionType, HttpVersion, Request, RequestError, ParsedRequest};
+use crate::request::{ConnectionType, HttpVersion, Request, RequestError, ReceivedRequest};
 use crate::request_parser::{ParseHttpRequestSettings, Parser};
 use crate::tcp_session::TcpSession;
 use crate::websocket;
@@ -104,8 +104,8 @@ impl TcpClient {
         }
 
         match self.request_parser.parse_yet(data, &settings.parse_http_request_settings) {
-            Ok((parsed_request, surplus)) => {
-                self.process_parsed_request(parsed_request, surplus, settings);
+            Ok((received_request, surplus)) => {
+                self.process_received_request(received_request, surplus, settings);
             }
             Err(parse_err) => {
                 match parse_err {
@@ -121,13 +121,13 @@ impl TcpClient {
         }
     }
 
-    fn process_parsed_request(&mut self, parsed_request: ParsedRequest, surplus: Vec<u8>, settings: &Settings) {
-        let need_disconnect_after_response = need_close_by_version_and_connection(&parsed_request);
+    fn process_received_request(&mut self, received_request: ReceivedRequest, surplus: Vec<u8>, settings: &Settings) {
+        let need_disconnect_after_response = need_close_by_version_and_connection(&received_request);
         self.tcp_session.inner.need_disconnect_after_http_response.store(need_disconnect_after_response, Ordering::SeqCst);
 
-        let content_len = parsed_request.content_len();
+        let content_len = received_request.content_len();
 
-        self.tcp_session.call_http_callback(Ok(Request { parsed_request, tcp_session: self.tcp_session.inner.clone() }));
+        self.tcp_session.call_http_callback(Ok(Request { received_request, tcp_session: self.tcp_session.clone() }));
 
         let content_callback = self.tcp_session.inner.content_callback.lock()
             .unwrap_or_else(|err| { unreachable!(err) });
@@ -237,7 +237,7 @@ impl Default for Settings {
 }
 
 /// Determines whether to close the connection after responding by the content of the request.
-fn need_close_by_version_and_connection(request: &ParsedRequest) -> bool {
+fn need_close_by_version_and_connection(request: &ReceivedRequest) -> bool {
     if let Some(connection_type) = &request.connection_type() {
         if let ConnectionType::Close = connection_type {
             return true;
@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn test_version() {
-        let mut request = ParsedRequest::new();
+        let mut request = ReceivedRequest::new();
         request.version = HttpVersion::Http1_0;
         request.connection_type = Some(ConnectionType::Close);
         assert_eq!(need_close_by_version_and_connection(&request), true);

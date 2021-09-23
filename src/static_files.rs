@@ -138,7 +138,7 @@ impl StaticFiles {
                             if static_file.etag.is_empty() { "".to_string() } else { format!("ETag: {}\r\n", static_file.etag) }
                         ));
 
-                        request.response_raw(&response);
+                        request.tcp_session.send(&response);
                         return;
                     }
 
@@ -180,10 +180,10 @@ impl StaticFiles {
 
                     if content.len() < self.united_response_limit {
                         response.extend(&content[..]);
-                        request.response_raw(&response);
+                        request.tcp_session().send(&response);
                     } else {
-                        request.response_raw(&response);
-                        request.response_raw_arc(&content);
+                        request.tcp_session().send(&response);
+                        request.tcp_session().send(&content);
                     }
                 }
                 None => {

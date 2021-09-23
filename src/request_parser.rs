@@ -1,11 +1,11 @@
-use crate::request::{ConnectionType, Header, HttpVersion, RequestError, ParsedRequest};
+use crate::request::{ConnectionType, Header, HttpVersion, RequestError, ReceivedRequest};
 use std::str::from_utf8;
 use percent_encoding::percent_decode;
 
 /// HTTP request parser.
 pub struct Parser {
     /// Not ready request. Internal state between parsing iterations.
-    request: ParsedRequest,
+    request: ReceivedRequest,
     /// What parse now. Internal state between parsing iterations.
     parse_state: ParseState,
 }
@@ -49,12 +49,12 @@ impl Parser {
     pub(crate) fn new() -> Self {
         Parser {
             parse_state: ParseState::Method,
-            request: ParsedRequest::new(),
+            request: ReceivedRequest::new(),
         }
     }
 
     /// Parse. At the moment, in case of an error, the parser becomes invalid and needs to be recreated.
-    pub fn parse_yet(&mut self, buf: &[u8], parse_settings: &ParseHttpRequestSettings) -> Result<(ParsedRequest, Vec<u8>), RequestError> {
+    pub fn parse_yet(&mut self, buf: &[u8], parse_settings: &ParseHttpRequestSettings) -> Result<(ReceivedRequest, Vec<u8>), RequestError> {
         let prev_idx = self.request.raw.len();
         self.request.raw.extend_from_slice(buf);
 
@@ -220,7 +220,7 @@ impl Parser {
             let surplus = self.request.raw[request_len..].to_vec();
             self.request.raw.truncate(request_len);
 
-            let mut new_request = ParsedRequest::new();
+            let mut new_request = ReceivedRequest::new();
             std::mem::swap(&mut new_request, &mut self.request);
 
             return Ok((new_request, surplus));

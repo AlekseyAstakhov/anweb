@@ -27,12 +27,12 @@ impl TcpSession {
     }
 
     /// Send arbitrary data to the client. Data may not be sent immediately, but in parts.
-    pub fn send(&mut self, data: &[u8]) {
+    pub fn send(&self, data: &[u8]) {
         self.inner.send(data);
     }
 
     /// Send arbitrary shared data to the client. Data may not be sent immediately, but in parts.
-    pub fn send_arc(&mut self, data: &Arc<Vec<u8>>) {
+    pub fn send_arc(&self, data: &Arc<Vec<u8>>) {
         self.inner.send_arc(data);
     }
 

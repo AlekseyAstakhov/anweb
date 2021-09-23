@@ -1,4 +1,4 @@
-use crate::request::{ConnectionType, HttpVersion, Request, ParsedRequest};
+use crate::request::{ConnectionType, HttpVersion, Request, ReceivedRequest};
 
 /// For build and send HTTP response.
 pub struct Response<'a, 'b, 'c, 'd, 'e> {
@@ -50,7 +50,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
 
         response.extend_from_slice(self.content);
 
-        self.request.response_raw(&response);
+        self.request.tcp_session().send(&response);
     }
 
     /// Set any type content.
@@ -140,7 +140,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
         }
     }
 
-    fn connection_str<'r>(&self, request: &'r ParsedRequest) -> &'static str {
+    fn connection_str<'r>(&self, request: &'r ReceivedRequest) -> &'static str {
         if let Some(keep_alive_connection) = self.keep_alive_connection {
             if keep_alive_connection {
                 "Connection: keep_alive\r\n"
@@ -153,7 +153,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
     }
 }
 
-pub fn connection_str_by_request(request: &ParsedRequest) -> &'static str {
+pub fn connection_str_by_request(request: &ReceivedRequest) -> &'static str {
     if let Some(connection_type) = &request.connection_type() {
         match connection_type {
             ConnectionType::KeepAlive => "Connection: keep_alive\r\n",
