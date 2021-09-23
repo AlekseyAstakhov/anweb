@@ -145,7 +145,7 @@ impl Worker {
 
                             let read_buf = &mut self.read_buf[..];
                             let catch_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                                client.on_read_ready(clients_settings, read_buf);
+                                client.read_stream(clients_settings, read_buf);
                             }));
 
                             if catch_result.is_err() {

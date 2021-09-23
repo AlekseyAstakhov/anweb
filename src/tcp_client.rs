@@ -38,10 +38,10 @@ impl TcpClient {
         }
     }
 
-    pub fn on_read_ready(&mut self, settings: &Settings, read_buf: &mut [u8]) {
+    pub fn read_stream(&mut self, settings: &Settings, read_buf: &mut [u8]) {
         self.pipelining_http_requests_count = 0;
 
-        match self.tcp_session.inner.read(read_buf) {
+        match self.tcp_session.inner.read_stream(read_buf) {
             Ok(read_cnt) => {
                 if read_cnt == 0 {
                     self.tcp_session.disconnect();

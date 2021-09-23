@@ -41,6 +41,15 @@ impl TcpSession {
         self.inner.disconnect();
     }
 
+    /// Sets callback that will be called when data is read from tcp stream.
+    /// Data can't be empty.
+    /// Data will already decoded if tls used.
+    pub fn on_data_received(&self, f: impl FnMut(&[u8]) + Send + 'static) {
+        if let Ok(mut on_data_received_callback) = self.inner.on_data_received_callback.lock() {
+            *on_data_received_callback = Some(Box::new(f));
+        }
+    }
+
     /// Switch to HTTP mode. Set a callback function that is called when a new HTTP request is received or error receiving it.
     pub fn to_http(&self, request_or_error_callback: impl FnMut(HttpResult) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
         if let Ok(mut http_request_callback) = self.inner.http_request_callback.lock() {
@@ -90,6 +99,7 @@ impl TcpSession {
                 mio_stream: Mutex::new(stream),
                 addr,
                 tls_session,
+                on_data_received_callback: Mutex::new(None),
                 http_request_callback: Mutex::new(None),
                 is_http_mode: Arc::new(AtomicBool::new(false)),
                 websocket_callback: Mutex::new(None),
@@ -196,7 +206,7 @@ impl TcpSession {
 
 impl Read for TcpSession {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.inner.read(buf)
+        self.inner.read_stream(buf)
     }
 }
 
@@ -225,6 +235,9 @@ pub(crate) struct InnerTcpSession {
     pub(crate) mio_stream: Mutex<mio::net::TcpStream>,
     /// TLS session.
     tls_session: Option<Mutex<rustls::ServerSession>>,
+
+    /// Callback function that is called when a data read from tcp socket.
+    pub(crate) on_data_received_callback: Mutex<Option<Box<dyn FnMut(&[u8]) + Send>>>,
 
     /// Callback function that is called when a new HTTP request is received or error receiving it.
     pub(crate) http_request_callback: Mutex<Option<Box<dyn FnMut(HttpResult) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
@@ -269,8 +282,8 @@ impl InnerTcpSession {
         self.is_http_mode.load(Ordering::SeqCst)
     }
 
-    pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        let readed_cnt = {
+    pub fn read_stream(&self, buf: &mut [u8]) -> io::Result<usize> {
+        let read_cnt = {
             match self.mio_stream.lock() {
                 Ok(mut stream) => {
                     //~=~=~=~=~=~=~=~=
@@ -283,14 +296,25 @@ impl InnerTcpSession {
             }
         };
 
-        match &self.tls_session {
-            None => Ok(readed_cnt),
-            Some(tls_session) => {
-                if readed_cnt == 0 {
-                    return Ok(0);
-                }
+        if read_cnt == 0 {
+            return Ok(0);
+        }
 
-                let read_buf: &mut dyn std::io::Read = &mut &buf[..readed_cnt];
+        let call_on_data_received_callback = |data: &[u8]| {
+            if let Ok(mut on_data_received_callback) = self.on_data_received_callback.lock() {
+                if let Some(on_data_received_callback) = &mut *on_data_received_callback {
+                    on_data_received_callback(data);
+                }
+            }
+        };
+
+        match &self.tls_session {
+            None => {
+                call_on_data_received_callback(&buf[..read_cnt]);
+                Ok(read_cnt)
+            },
+            Some(tls_session) => {
+                let read_buf: &mut dyn std::io::Read = &mut &buf[..read_cnt];
                 match tls_session.lock() {
                     Ok(mut tls_session) => {
                         tls_session.read_tls(read_buf)?;
@@ -299,7 +323,7 @@ impl InnerTcpSession {
                             return Err(io::Error::new(ErrorKind::Other, err));
                         }
 
-                        let tlse_readed_cnt = tls_session.read(&mut buf[..])?;
+                        let tls_readed_cnt = tls_session.read(&mut buf[..])?;
                         while tls_session.wants_write() {
                             if let Ok(mut stream) = self.mio_stream.lock() {
                                 //=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=
@@ -308,11 +332,13 @@ impl InnerTcpSession {
                             }
                         }
 
-                        if tlse_readed_cnt == 0 {
+                        if tls_readed_cnt == 0 {
                             return Err(io::Error::new(std::io::ErrorKind::WouldBlock, "operation would block"));
                         }
 
-                        Ok(tlse_readed_cnt)
+                        call_on_data_received_callback(&buf[..tls_readed_cnt]);
+
+                        Ok(tls_readed_cnt)
                     }
                     Err(err) => {
                         Err(io::Error::new(ErrorKind::Other, format!("{}", err)))
