@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let request = http_result?;
                 match request.path() {
                     "/" => {
-                        let files_page = &index_page_html(static_files.files());
+                        let files_page = &index_page_html(&static_files.files());
                         request.response(200).html(files_page).send();
                     }
                     path => {
@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Response body with list of links to files in this source directory.
-fn index_page_html(file_names: Vec<String>) -> String {
+fn index_page_html(file_names: &Vec<String>) -> String {
     let mut body = "<html>\n<body>\n<h3>Static files example</h3>\n".to_string();
 
     for file_name in file_names {
