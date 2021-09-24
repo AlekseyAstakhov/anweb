@@ -7,7 +7,7 @@ use crate::websocket_session::WebsocketError;
 use std::sync::atomic::Ordering;
 
 /// Read, accumulate and process incoming data from clients. Parse http, websockets, tls and etc.
-pub struct TcpClient {
+pub struct WebSession {
     /// The framework user is using this.
     pub(crate) tcp_session: TcpSession,
 
@@ -26,9 +26,9 @@ pub struct TcpClient {
     pipelining_http_requests_count: u16,
 }
 
-impl TcpClient {
+impl WebSession {
     pub fn new(tcp_session: TcpSession) -> Self {
-        TcpClient {
+        WebSession {
             tcp_session,
             request_parser: Parser::new(),
             content_len: 0,

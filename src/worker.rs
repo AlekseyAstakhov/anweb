@@ -1,5 +1,5 @@
-use crate::tcp_client;
-use crate::tcp_client::TcpClient;
+use crate::web_session;
+use crate::web_session::WebSession;
 use crate::server::{Error, Event, Settings};
 use crate::tcp_session::TcpSession;
 
@@ -14,9 +14,9 @@ use std::time::Duration;
 /// Single threaded TCP server designed for use as an HTTP server.
 pub struct Worker {
     /// Connected clients.
-    pub tcp_clients: Slab<TcpClient>,
+    pub web_sessions: Slab<WebSession>,
 
-    /// Connection counter. Used to create clients identifiers. Atomic in order to identify users on several such servers.
+    /// Connection counter. Used to create tcp connections identifiers. Atomic in order to identify users on several such servers.
     pub connections_counter: Arc<AtomicU64>,
 
     /// Server settings.
@@ -50,14 +50,14 @@ impl Worker {
         start_thread_of_update_http_date_string(http_date_string.clone());
 
         Ok(Worker {
-            tcp_clients: Slab::with_capacity(CLIENTS_CAPACITY),
+            web_sessions: Slab::with_capacity(CLIENTS_CAPACITY),
             connections_counter: Arc::new(AtomicU64::new(0)),
             mio_poll: Arc::new(mio_poll),
             events: mio::Events::with_capacity(POLL_EVENTS_CNT),
             tcp_listener,
             settings: Settings {
                 tls_config: None,
-                clients_settings: tcp_client::Settings::default(),
+                web_settings: web_session::Settings::default(),
             },
             stopper,
             http_date_string,
@@ -89,22 +89,22 @@ impl Worker {
         }
     }
 
-    /// Process MIO events. Register new clients connections.
+    /// Process MIO events. Register new tcp connections.
     fn process_mio_events(&mut self, event_callback: &mut (dyn FnMut(Event))) {
         for event in self.events.iter() {
             match event.token() {
                 LISTENER_TOKEN => {
                     while let Ok((stream, addr)) = self.tcp_listener.accept() {
-                        let client_id = self.connections_counter.fetch_add(1, Ordering::SeqCst);
-                        let slab_key = self.tcp_clients.vacant_entry().key();
+                        let session_id = self.connections_counter.fetch_add(1, Ordering::SeqCst);
+                        let slab_key = self.web_sessions.vacant_entry().key();
 
                         let rustls_session = match &self.settings.tls_config {
                             Some(tls_config) => Some(Mutex::new(rustls::ServerSession::new(&tls_config))),
                             None => None,
                         };
 
-                        let tcp_session = TcpSession::new(client_id, slab_key, stream, addr, rustls_session, self.mio_poll.clone(), self.http_date_string.clone());
-                        let tcp_client = TcpClient::new(tcp_session.clone());
+                        let tcp_session = TcpSession::new(session_id, slab_key, stream, addr, rustls_session, self.mio_poll.clone(), self.http_date_string.clone());
+                        let web_session = WebSession::new(tcp_session.clone());
 
                         event_callback(Event::Connected(tcp_session.clone()));
 
@@ -120,18 +120,18 @@ impl Worker {
                             Err(err) => {
                                 let err = std::io::Error::new(ErrorKind::Other, format!("{}", err));
                                 event_callback(Event::Error(Error::RegisterError(err)));
-                                event_callback(Event::Disconnected(client_id));
+                                event_callback(Event::Disconnected(session_id));
                                 continue;
                             }
                         }
 
                         match register_result {
                             Ok(()) => {
-                                self.tcp_clients.insert(tcp_client);
+                                self.web_sessions.insert(web_session);
                             }
                             Err(err) => {
                                 event_callback(Event::Error(Error::RegisterError(err)));
-                                event_callback(Event::Disconnected(client_id));
+                                event_callback(Event::Disconnected(session_id));
                             }
                         }
                     }
@@ -140,48 +140,48 @@ impl Worker {
                     let mut need_remove = None;
 
                     if event.readiness().is_readable() {
-                        // there is a possibility of receiving events on a already removed client if library user cloned stream and not deleted yet
-                        if let Some(client) = self.tcp_clients.get_mut(token_id) {
-                            let clients_settings = &self.settings.clients_settings;
+                        // there is a possibility of receiving events on a already removed session if library user cloned stream and not deleted yet
+                        if let Some(session) = self.web_sessions.get_mut(token_id) {
+                            let session_settings = &self.settings.web_settings;
 
                             let read_buf = &mut self.read_buf[..];
                             let catch_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                                client.read_stream(clients_settings, read_buf);
+                                session.read_stream(session_settings, read_buf);
                             }));
 
                             if catch_result.is_err() {
-                                need_remove = Some(client.tcp_session.id());
-                                event_callback(Event::Error(Error::Panicked(client.tcp_session.id())));
-                            } else if client.tcp_session.need_disconnect() {
-                                need_remove = Some(client.tcp_session.id());
+                                need_remove = Some(session.tcp_session.id());
+                                event_callback(Event::Error(Error::Panicked(session.tcp_session.id())));
+                            } else if session.tcp_session.need_disconnect() {
+                                need_remove = Some(session.tcp_session.id());
                             }
                         }
                     }
 
                     if event.readiness().is_writable() {
-                        if let Some(client) = self.tcp_clients.get_mut(token_id) {
-                            client.tcp_session.send_yet();
+                        if let Some(session) = self.web_sessions.get_mut(token_id) {
+                            session.tcp_session.send_yet();
 
-                            if client.tcp_session.need_disconnect() {
-                                need_remove = Some(client.tcp_session.id());
+                            if session.tcp_session.need_disconnect() {
+                                need_remove = Some(session.tcp_session.id());
                             }
                         }
                     }
 
-                    if let Some(client_id) = need_remove {
-                        self.tcp_clients.remove(token_id);
-                        event_callback(Event::Disconnected(client_id));
+                    if let Some(session_id) = need_remove {
+                        self.web_sessions.remove(token_id);
+                        event_callback(Event::Disconnected(session_id));
                     }
                 }
             }
         }
     }
 
-    /// Remove disconnected clients.
+    /// Remove disconnected sessions.
     fn remove_disconnected(&mut self, event_callback: &mut (dyn FnMut(Event))) {
-        self.tcp_clients.retain(|_, client| {
-            if client.tcp_session.need_disconnect() {
-                event_callback(Event::Disconnected(client.tcp_session.id()));
+        self.web_sessions.retain(|_, web_session| {
+            if web_session.tcp_session.need_disconnect() {
+                event_callback(Event::Disconnected(web_session.tcp_session.id()));
                 return false;
             }
 

@@ -1,4 +1,4 @@
-use crate::tcp_client;
+use crate::web_session;
 use crate::tcp_session::TcpSession;
 use crate::worker::Worker;
 
@@ -27,8 +27,9 @@ pub enum Error {
     PollError(std::io::Error),
     /// MIO register error.
     RegisterError(std::io::Error),
-    /// If panicked when processing client incoming data including library user code. Client will be disconnected.
-    Panicked(u64 /*client id*/),
+    /// If panicked when processing client incoming data or user code in callbacks.
+    /// Tcp connection will be closed, all related resources removed.
+    Panicked(u64 /*tcp session id*/),
     /// When worker was not created (create mio poll or register listener error).
     WorkerNotCreated(std::io::Error),
     /// Worker panicked with cause of panic.
@@ -48,8 +49,8 @@ impl std::error::Error for Error {}
 pub struct Settings {
     /// Configuration of TLS (rustls).
     pub tls_config: Option<Arc<rustls::ServerConfig>>,
-    // Client settings: HTTP parser and websocket settings.
-    pub clients_settings: tcp_client::Settings,
+    // Settings of HTTP parser, websocket settings and other web things.
+    pub web_settings: web_session::Settings,
 }
 
 /// Multithreaded TCP server designed for use as an HTTP server.
@@ -82,7 +83,7 @@ impl Server {
             num_threads: num_cpus::get(),
             settings: Settings {
                 tls_config: None,
-                clients_settings: tcp_client::Settings::default(),
+                web_settings: web_session::Settings::default(),
             },
             stopper: Arc::new(AtomicBool::new(false)),
         }

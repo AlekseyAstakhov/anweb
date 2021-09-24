@@ -15,5 +15,5 @@ pub mod server;
 pub mod static_files;
 pub mod websocket;
 pub mod worker;
-mod tcp_client;
+mod web_session;
 mod request_parser;

@@ -10,7 +10,7 @@ use std::str::from_utf8;
 use std::sync::{Arc, Mutex, RwLock};
 
 struct Chat {
-    users: RwLock<BTreeMap<u64 /*id*/, WebsocketSession>>, // Cloned client tcp stream by id.
+    users: RwLock<BTreeMap<u64 /*tcp session id*/, WebsocketSession>>,
     messages: Mutex<Vec<String>>,
 }
 
@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     server.settings.tls_config = Some(Arc::new(tls_config));
 
-    server.settings.clients_settings.websocket_payload_limit = 1000;
+    server.settings.web_settings.websocket_payload_limit = 1000;
 
     server.run(move |server_event| {
         match server_event {
@@ -70,9 +70,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Ok(())
                 });
             }
-            server::Event::Disconnected(client_id) => {
+            server::Event::Disconnected(sesion_id) => {
                 if let Ok(mut users) = chat.users.write() {
-                    users.remove(&client_id);
+                    users.remove(&sesion_id);
                 }
             }
             _ => (),

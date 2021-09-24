@@ -8,7 +8,7 @@ use std::io::{ErrorKind, Read, Write};
 use std::net::SocketAddr;
 use crate::request::Request;
 
-/// Client connection to the server.
+/// Tcp client connection to the server.
 #[derive(Clone)]
 pub struct TcpSession {
     /// Private data.
@@ -16,7 +16,7 @@ pub struct TcpSession {
 }
 
 impl TcpSession {
-    /// Client id on server in connection order.
+    /// Tsp client connection id on server in connection order.
     pub fn id(&self) -> u64 {
         self.inner.id()
     }
@@ -63,7 +63,7 @@ impl TcpSession {
         self.inner.need_disconnect.load(Ordering::SeqCst)
     }
 
-    /// Return true if client is using for receiving http requests and send responses.
+    /// Return true if client connection is using for receiving http requests and send responses.
     pub(crate) fn is_http_mode(&self) -> bool {
         self.inner.is_http_mode()
     }
@@ -223,11 +223,11 @@ impl Write for TcpSession {
 /// It's use in load content callback for inform about finish of reading.
 pub type ContentIsComplite = Option<Request>;
 
-/// Private data of client.
+/// Private data of tcp session.
 pub(crate) struct InnerTcpSession {
-    /// Client id on server in connection order.
+    /// Tcp client connection id on the server in connection order.
     id: u64,
-    /// Slab key of this client connection on http server.
+    /// Slab key of tcp client connection on the server.
     slab_key: usize,
     /// An internet socket address, either IPv4 or IPv6.
     pub(crate) addr: SocketAddr,
@@ -271,9 +271,9 @@ struct SurplusForWrite {
     write_yet_cnt: usize,
 }
 
-/// Private tcp-client data.
+/// Private tcp session data.
 impl InnerTcpSession {
-    /// Client id on server in connection order.
+    /// Tcp connection id on server in connection order.
     pub fn id(&self) -> u64 {
         self.id
     }

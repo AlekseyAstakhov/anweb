@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = ([0, 0, 0, 0], 8080).into();
     let mut server = Server::new(&addr)?;
 
-    server.settings.clients_settings.websocket_payload_limit = 10000;
+    server.settings.web_settings.websocket_payload_limit = 10000;
 
     server.run(|server_event| {
         if let server::Event::Connected(tcp_session) = server_event {
@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             let received_frame = websocket_result?;
                             websocket_session.send(&frame(received_frame.opcode(), received_frame.payload()));
                             // Need return Ok(()) from this callback.
-                            // If you return any error then the tcp client connection will be closed.
+                            // If you return any error then the tcp connection will be closed.
                             Ok(())
                         })?;
                     }
