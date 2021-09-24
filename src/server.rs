@@ -1,6 +1,6 @@
-use crate::web_session;
 use crate::tcp_session::TcpSession;
 use crate::worker::Worker;
+use crate::web_session;
 
 use mio::net::TcpListener;
 use std::net::SocketAddr;
@@ -13,9 +13,9 @@ pub enum Event {
     /// Server has started (listening started).
     Started,
     /// New TCP connection has been established.
-    Connected(TcpSession),
+    Incoming(TcpSession),
     /// TCP connection was closed. This can be caused either by the server’s initiative when the connection cannot be served, or by forced closure at the initiative of the library user.
-    Disconnected(u64 /*id*/),
+    Closed(u64 /*id*/),
     /// Server error.
     Error(Error),
 }

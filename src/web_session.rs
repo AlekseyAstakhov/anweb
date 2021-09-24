@@ -1,10 +1,10 @@
 use crate::http_result::HttpError;
-use crate::request::{ConnectionType, HttpVersion, Request, RequestError, ReceivedRequest};
+use crate::request::{RequestError, ReceivedRequest, Request};
 use crate::request_parser::{ParseHttpRequestSettings, Parser};
 use crate::tcp_session::TcpSession;
 use crate::websocket;
-use crate::websocket_session::WebsocketError;
 use std::sync::atomic::Ordering;
+use crate::websocket::WebsocketError;
 
 /// Read, accumulate and process incoming data from clients. Parse http, websockets, tls and etc.
 pub struct WebSession {
@@ -19,11 +19,11 @@ pub struct WebSession {
     /// Number of already read bytes of content.
     already_read_content_len: usize,
 
-    /// It's used if connection upgraded to websocket. The parser need to be recreated only after error!
-    websocket_parser: websocket::Parser,
-
     /// For limit of requests count in one socket read operation.
     pipelining_http_requests_count: u16,
+
+    /// It's used if connection upgraded to websocket. The parser need to be recreated only after error!
+    websocket_parser: websocket::Parser,
 }
 
 impl WebSession {
@@ -44,7 +44,7 @@ impl WebSession {
         match self.tcp_session.inner.read_stream(read_buf) {
             Ok(read_cnt) => {
                 if read_cnt == 0 {
-                    self.tcp_session.disconnect();
+                    self.tcp_session.close();
                     return;
                 }
 
@@ -53,7 +53,7 @@ impl WebSession {
             Err(err) => {
                 if err.kind() == std::io::ErrorKind::WouldBlock {
                 } else if err.kind() == std::io::ErrorKind::ConnectionReset {
-                    self.tcp_session.disconnect();
+                    self.tcp_session.close();
                 } else {
                     if self.tcp_session.is_http_mode() {
                         self.tcp_session.call_http_callback(Err(HttpError::StreamError(err)));
@@ -61,14 +61,14 @@ impl WebSession {
                         self.tcp_session.call_websocket_callback(Err(WebsocketError::StreamError(err)));
                     }
 
-                    self.tcp_session.disconnect();
+                    self.tcp_session.close();
                 }
             }
         }
     }
 
     fn process_data(&mut self, data: &[u8], settings: &Settings) {
-        if self.tcp_session.need_disconnect() {
+        if self.tcp_session.need_close() {
             return;
         }
 
@@ -99,7 +99,7 @@ impl WebSession {
         self.pipelining_http_requests_count += 1;
         if self.pipelining_http_requests_count > settings.parse_http_request_settings.pipelining_requests_limit {
             self.tcp_session.call_http_callback(Err(HttpError::ParseRequestError(RequestError::PipeliningRequestsLimit)));
-            self.tcp_session.disconnect();
+            self.tcp_session.close();
             return;
         }
 
@@ -114,7 +114,7 @@ impl WebSession {
                     parse_err => {
                         self.tcp_session.call_http_callback(Err(HttpError::ParseRequestError(parse_err)));
                         // close anyway
-                        self.tcp_session.disconnect();
+                        self.tcp_session.close();
                     }
                 }
             }
@@ -122,12 +122,9 @@ impl WebSession {
     }
 
     fn process_received_request(&mut self, received_request: ReceivedRequest, surplus: Vec<u8>, settings: &Settings) {
-        let need_disconnect_after_response = need_close_by_version_and_connection(&received_request);
-        self.tcp_session.inner.need_disconnect_after_http_response.store(need_disconnect_after_response, Ordering::SeqCst);
-
         let content_len = received_request.content_len();
 
-        self.tcp_session.call_http_callback(Ok(Request { received_request, tcp_session: self.tcp_session.clone() }));
+        self.tcp_session.call_http_callback(Ok(Request { request_data: received_request, tcp_session: self.tcp_session.clone() }));
 
         let content_callback = self.tcp_session.inner.content_callback.lock()
             .unwrap_or_else(|err| { unreachable!(err) });
@@ -152,7 +149,7 @@ impl WebSession {
             }
         }
 
-        if !surplus.is_empty() && !self.tcp_session.need_disconnect() {
+        if !surplus.is_empty() && !self.tcp_session.need_close() {
             // here is recursion
             self.process_data(&surplus, settings);
         }
@@ -173,11 +170,11 @@ impl WebSession {
         if let Some((content_callback, request)) = &mut *content_callback {
             let request = if complete { request.take() } else { None };
             if content_callback(content, request).is_err() {
-                self.tcp_session.disconnect();
+                self.tcp_session.close();
             }
         }
 
-        if self.tcp_session.need_disconnect() {
+        if self.tcp_session.need_close() {
             return;
         }
 
@@ -204,7 +201,7 @@ impl WebSession {
                     self.tcp_session.call_websocket_callback(Ok(&frame));
 
                     if frame_is_close {
-                        self.tcp_session.disconnect();
+                        self.tcp_session.close();
                     } else if !surplus.is_empty() {
                         self.process_data(&surplus, settings); // here is recursion
                     }
@@ -212,7 +209,7 @@ impl WebSession {
             }
             Err(err) => {
                 self.tcp_session.call_websocket_callback(Err(WebsocketError::ParseFrameError(err)));
-                self.tcp_session.disconnect();
+                self.tcp_session.close();
             }
         }
     }
@@ -233,56 +230,5 @@ impl Default for Settings {
             parse_http_request_settings: ParseHttpRequestSettings::default(),
             websocket_payload_limit: 16_000_000,
         }
-    }
-}
-
-/// Determines whether to close the connection after responding by the content of the request.
-fn need_close_by_version_and_connection(request: &ReceivedRequest) -> bool {
-    if let Some(connection_type) = &request.connection_type() {
-        if let ConnectionType::Close = connection_type {
-            return true;
-        }
-    } else {
-        // by default in HTTP/1.0 connection close but in HTTP/1.1 keep-alive
-        if let HttpVersion::Http1_0 = request.version() {
-            return true;
-        }
-    }
-
-    false
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_version() {
-        let mut request = ReceivedRequest::new();
-        request.version = HttpVersion::Http1_0;
-        request.connection_type = Some(ConnectionType::Close);
-        assert_eq!(need_close_by_version_and_connection(&request), true);
-
-        request.version = HttpVersion::Http1_0;
-        request.connection_type = Some(ConnectionType::KeepAlive);
-        assert_eq!(need_close_by_version_and_connection(&request), false);
-
-        // by default in HTTP/1.0 connection close
-        request.version = HttpVersion::Http1_0;
-        request.connection_type = None;
-        assert_eq!(need_close_by_version_and_connection(&request), true);
-
-        request.version = HttpVersion::Http1_1;
-        request.connection_type = Some(ConnectionType::Close);
-        assert_eq!(need_close_by_version_and_connection(&request), true);
-
-        request.version = HttpVersion::Http1_1;
-        request.connection_type = Some(ConnectionType::KeepAlive);
-        assert_eq!(need_close_by_version_and_connection(&request), false);
-
-        // by default in HTTP/1.1 connection keep-alive
-        request.version = HttpVersion::Http1_1;
-        request.connection_type = None;
-        assert_eq!(need_close_by_version_and_connection(&request), false);
     }
 }

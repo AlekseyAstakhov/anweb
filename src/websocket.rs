@@ -1,6 +1,7 @@
 use crate::request::ReceivedRequest;
 use sha1::{Digest, Sha1};
 use std::u16;
+use crate::tcp_session::TcpSession;
 
 pub const CONTINUATION_OPCODE: u8 = 0x0;
 pub const TEXT_OPCODE: u8 = 0x1;
@@ -40,13 +41,35 @@ pub fn handshake_response(request: &ReceivedRequest) -> Result<Vec<u8>, Handshak
 #[derive(Debug)]
 pub struct HandshakeError {}
 
-impl std::fmt::Display for HandshakeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+#[derive(Clone)]
+pub struct Websocket {
+    pub(crate) tcp_session: TcpSession,
+}
+
+impl Websocket {
+    /// Send raw data via socket.
+    pub fn send(&self, opcode: u8, payload: &[u8]) {
+        self.tcp_session.send(&frame(opcode, payload));
+    }
+
+    /// Close of client socket. After clossing will be generated `sever::Event::Disconnected`.
+    pub fn close(&self) {
+        self.tcp_session.close()
+    }
+
+    pub fn tcp_session(&self) -> &TcpSession {
+        &self.tcp_session
     }
 }
 
-impl std::error::Error for HandshakeError {}
+/// Received websocket frame or error receiving it
+pub type WebsocketResult<'a> = Result<&'a ParsedFrame, WebsocketError>;
+
+/// Error of websocket such as parsing frame or read from socket.
+pub enum WebsocketError {
+    ParseFrameError(ParseFrameError),
+    StreamError(std::io::Error),
+}
 
 /// Make vector containing frame based on the specified opcode and payload data.
 pub fn frame(opcode: u8, payload: &[u8]) -> Vec<u8> {
@@ -74,105 +97,10 @@ pub fn frame(opcode: u8, payload: &[u8]) -> Vec<u8> {
     result
 }
 
-/// Parse websocket frame. See RFC: 6455 section 5.2, Base Framing Protocol. No mask because server accept only frames where mask==1.
-#[derive(Debug)]
-pub struct ParsedFrame {
-    /// FIN: First bit of first byte. Indicates that this is the final fragment in a message. The first fragment MAY also be the final fragment.
-    fin: bool,
-    /// opcode: Last 4 bits of first byte. Defines the interpretation of the "Payload data". If an unknown opcode is received, the receiving endpoint MUST _Fail the WebSocket Connection_.
-    opcode: u8,
-
-    /// Full first byte of frame.
-    first_byte: u8,
-
-    /// Buffer accumulating incoming data.
-    buf: Vec<u8>,
-
-    /// Index of payload data in incoming data buffer.
-    payload_index: usize,
-    /// Length of payload data.
-    payload_len: usize,
-    /// Index of masking key in incoming data buffer.
-    masking_key_index: usize,
-}
-
 /// The parser need to be recreated only after error! Here is not all of things from RFC: 6455
 pub struct Parser {
     state: ParserState,
     frame: ParsedFrame,
-}
-
-impl ParsedFrame {
-    /// See RFC: 6455 section 5.2, Base Framing Protocol
-    pub fn payload(&self) -> &[u8] {
-        &self.buf[self.payload_index..self.payload_index + self.payload_len]
-    }
-
-    /// See RFC: 6455 section 5.2, Base Framing Protocol
-    pub fn opcode(&self) -> u8 {
-        self.opcode
-    }
-
-    /// See RFC: 6455 section 5.2, Base Framing Protocol
-    pub fn mask(&self) -> Option<&[u8]> {
-        if self.masking_key_index == 0 || self.masking_key_index + 4 > self.buf.len() {
-            return None;
-        }
-
-        Some(&self.buf[self.masking_key_index..self.masking_key_index + 4])
-    }
-
-    pub fn raw(&self) -> &[u8] {
-        &self.buf
-    }
-
-    /// Opcode is text. It does not guarantee that payload is valid utf-8 string. See RFC: 6455 section 5.2, Base Framing Protocol
-    pub fn is_text(&self) -> bool {
-        self.opcode == TEXT_OPCODE
-    }
-
-    /// Opcode is binary. See RFC: 6455 section 5.2, Base Framing Protocol
-    pub fn is_binary(&self) -> bool {
-        self.opcode == BINARY_OPCODE
-    }
-
-    /// Opcode is continuation. See RFC: 6455 section 5.2, Base Framing Protocol
-    pub fn is_continuation(&self) -> bool {
-        self.opcode == CONTINUATION_OPCODE
-    }
-
-    /// Opcode is close. See RFC: 6455 section 5.2, Base Framing Protocol
-    pub fn is_close(&self) -> bool {
-        self.opcode == CLOSE_OPCODE
-    }
-
-    /// Conditionally uninitialized frame data.
-    fn new() -> Self {
-        ParsedFrame {
-            fin: false,
-            opcode: 0,
-            first_byte: 0,
-            buf: Vec::new(),
-            payload_index: 0,
-            payload_len: 0,
-            masking_key_index: 0,
-        }
-    }
-}
-
-enum ParserState {
-    ParseFirstByteWhereFinAndOpcode,
-    ParseSecondByteWhereMaskAndPayloadLen,
-    ParseExtendedPayloadLen,
-    ParseMaskingKey,
-    LoadPayloadData,
-}
-
-#[derive(Debug)]
-pub enum ParseFrameError {
-    UnsupportedOpcode,
-    UnmaskedClientMaessage,
-    PayloadLimit,
 }
 
 impl Parser {
@@ -314,6 +242,101 @@ impl Parser {
     }
 }
 
+/// Parse websocket frame. See RFC: 6455 section 5.2, Base Framing Protocol. No mask because server accept only frames where mask==1.
+#[derive(Debug)]
+pub struct ParsedFrame {
+    /// FIN: First bit of first byte. Indicates that this is the final fragment in a message. The first fragment MAY also be the final fragment.
+    fin: bool,
+    /// opcode: Last 4 bits of first byte. Defines the interpretation of the "Payload data". If an unknown opcode is received, the receiving endpoint MUST _Fail the WebSocket Connection_.
+    opcode: u8,
+
+    /// Full first byte of frame.
+    first_byte: u8,
+
+    /// Buffer accumulating incoming data.
+    buf: Vec<u8>,
+
+    /// Index of payload data in incoming data buffer.
+    payload_index: usize,
+    /// Length of payload data.
+    payload_len: usize,
+    /// Index of masking key in incoming data buffer.
+    masking_key_index: usize,
+}
+
+impl ParsedFrame {
+    /// See RFC: 6455 section 5.2, Base Framing Protocol
+    pub fn payload(&self) -> &[u8] {
+        &self.buf[self.payload_index..self.payload_index + self.payload_len]
+    }
+
+    /// See RFC: 6455 section 5.2, Base Framing Protocol
+    pub fn opcode(&self) -> u8 {
+        self.opcode
+    }
+
+    /// See RFC: 6455 section 5.2, Base Framing Protocol
+    pub fn mask(&self) -> Option<&[u8]> {
+        if self.masking_key_index == 0 || self.masking_key_index + 4 > self.buf.len() {
+            return None;
+        }
+
+        Some(&self.buf[self.masking_key_index..self.masking_key_index + 4])
+    }
+
+    pub fn raw(&self) -> &[u8] {
+        &self.buf
+    }
+
+    /// Opcode is text. It does not guarantee that payload is valid utf-8 string. See RFC: 6455 section 5.2, Base Framing Protocol
+    pub fn is_text(&self) -> bool {
+        self.opcode == TEXT_OPCODE
+    }
+
+    /// Opcode is binary. See RFC: 6455 section 5.2, Base Framing Protocol
+    pub fn is_binary(&self) -> bool {
+        self.opcode == BINARY_OPCODE
+    }
+
+    /// Opcode is continuation. See RFC: 6455 section 5.2, Base Framing Protocol
+    pub fn is_continuation(&self) -> bool {
+        self.opcode == CONTINUATION_OPCODE
+    }
+
+    /// Opcode is close. See RFC: 6455 section 5.2, Base Framing Protocol
+    pub fn is_close(&self) -> bool {
+        self.opcode == CLOSE_OPCODE
+    }
+
+    /// Conditionally uninitialized frame data.
+    fn new() -> Self {
+        ParsedFrame {
+            fin: false,
+            opcode: 0,
+            first_byte: 0,
+            buf: Vec::new(),
+            payload_index: 0,
+            payload_len: 0,
+            masking_key_index: 0,
+        }
+    }
+}
+
+enum ParserState {
+    ParseFirstByteWhereFinAndOpcode,
+    ParseSecondByteWhereMaskAndPayloadLen,
+    ParseExtendedPayloadLen,
+    ParseMaskingKey,
+    LoadPayloadData,
+}
+
+#[derive(Debug)]
+pub enum ParseFrameError {
+    UnsupportedOpcode,
+    UnmaskedClientMaessage,
+    PayloadLimit,
+}
+
 impl Default for Parser {
     fn default() -> Self {
         Parser {
@@ -323,6 +346,27 @@ impl Default for Parser {
     }
 }
 
+
+impl From<std::io::Error> for WebsocketError {
+    fn from(err: std::io::Error) -> Self {
+        WebsocketError::StreamError(err)
+    }
+}
+
+impl From<ParseFrameError> for WebsocketError {
+    fn from(err: ParseFrameError) -> Self {
+        WebsocketError::ParseFrameError(err)
+    }
+}
+
+impl std::fmt::Display for HandshakeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl std::error::Error for HandshakeError {
+}
 
 #[cfg(test)]
 mod tests {

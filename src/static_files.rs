@@ -10,6 +10,7 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::thread::{sleep, spawn};
 use std::time::{Duration, SystemTime};
+use crate::response::need_close_by_request;
 
 /// Dynamic cache in the RAM of files on disk.
 /// It stores the files of the specified directory loaded in the RAM, monitors difference of
@@ -100,11 +101,12 @@ impl StaticFiles {
     }
 
     /// Send response with file content to the client.
-    pub fn response(&self, path: &str, request: &Request) -> io::Result<()> {
+    pub fn send_response(&self, path: &str, request: &Request) -> io::Result<()> {
         let mut result = Ok(());
 
+        let need_close_by_request = need_close_by_request(&request.request_data);
+
         self.get(path, |static_file| {
-            // this code is under read blocking of RwLock of all files
             match static_file {
                 Some(static_file) => {
                     let mut apply_browser_cache = false;
@@ -139,6 +141,11 @@ impl StaticFiles {
                         ));
 
                         request.tcp_session.send(&response);
+
+                        if need_close_by_request {
+                            request.tcp_session.close_after_send();
+                        }
+
                         return;
                     }
 
@@ -185,9 +192,13 @@ impl StaticFiles {
                         request.tcp_session().send(&response);
                         request.tcp_session().send_arc(content);
                     }
+
+                    if need_close_by_request {
+                        request.tcp_session.close_after_send();
+                    }
                 }
                 None => {
-                    result = Err(io::Error::new(ErrorKind::NotFound, "No such static file"))
+                    result = Err(io::Error::new(ErrorKind::NotFound, "No such static file"));
                 }
             }
         });
@@ -198,17 +209,9 @@ impl StaticFiles {
     /// Return current cached files paths.
     pub fn files(&self) -> Vec<String> {
         let mut result = vec![];
-        match self.cached_files.read() {
-            Ok(cached_files) => {
-                //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-                for cached_file in cached_files.keys() {
-                    result.push(cached_file.clone());
-                }
-                //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-            }
-            Err(err) => {
-                dbg!("unreachable code");
-                dbg!(err);
+        if let Ok(cached_files) = self.cached_files.read() {
+            for cached_file in cached_files.keys() {
+                result.push(cached_file.clone());
             }
         }
 
@@ -262,18 +265,10 @@ impl StaticFiles {
     fn get(&self, file_path: &str, mut result_callback: impl FnMut(Option<&StaticFile>)) {
         let file_name = if file_path.starts_with('/') { &file_path[1..] } else { file_path };
 
-        match self.cached_files.read() {
-            Ok(cached_files) => {
-                //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-                if let Some(static_file) = cached_files.get(file_name) {
-                    result_callback(Some(static_file));
-                    return;
-                }
-                //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-            }
-            Err(err) => {
-                dbg!("unreachable code");
-                dbg!(err);
+        if let Ok(cached_files) = self.cached_files.read() {
+            if let Some(static_file) = cached_files.get(file_name) {
+                result_callback(Some(static_file));
+                return;
             }
         }
 
@@ -283,19 +278,11 @@ impl StaticFiles {
     /// Remove from cache nonexistent files in directory on disk.
     fn remove_nonexistent(&self) {
         let mut nonexistent = vec![];
-        match self.cached_files.read() {
-            Ok(cached_files) => {
-                //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-                for file_name in cached_files.keys() {
-                    if !Path::new(&(self.dir_path.clone() + "/" + file_name)).exists() {
-                        nonexistent.push(file_name.clone());
-                    }
+        if let Ok(cached_files) = self.cached_files.read() {
+            for file_name in cached_files.keys() {
+                if !Path::new(&(self.dir_path.clone() + "/" + file_name)).exists() {
+                    nonexistent.push(file_name.clone());
                 }
-                //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-            }
-            Err(err) => {
-                dbg!("unreachable code");
-                dbg!(err);
             }
         }
 
@@ -303,17 +290,9 @@ impl StaticFiles {
             return;
         }
 
-        match self.cached_files.write() {
-            Ok(mut cached_files) => {
-                //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-                for file_name in nonexistent {
-                    cached_files.remove(&file_name);
-                }
-                //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-            }
-            Err(err) => {
-                dbg!("unreachable code");
-                dbg!(err);
+        if let Ok(mut cached_files) =  self.cached_files.write() {
+            for file_name in nonexistent {
+                cached_files.remove(&file_name);
             }
         }
     }
@@ -323,17 +302,9 @@ impl StaticFiles {
         if let Ok(modified) = metadata.modified() {
             let mut last_modified = None;
 
-            match self.cached_files.read() {
-                Ok(cached_files) => {
-                    //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-                    if let Some(cached_file) = cached_files.get(file_path) {
-                        last_modified = Some(cached_file.last_modified);
-                    }
-                    //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-                }
-                Err(err) => {
-                    dbg!("unreachable code");
-                    dbg!(err);
+            if let Ok(cached_files) = self.cached_files.read() {
+                if let Some(cached_file) = cached_files.get(file_path) {
+                    last_modified = Some(cached_file.last_modified);
                 }
             }
 
@@ -388,16 +359,8 @@ impl StaticFiles {
                 };
 
                 // short blocking
-                match self.cached_files.write() {
-                    Ok(mut cached_files) => {
-                        //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-                        cached_files.insert(file_name, cached_file);
-                        //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-                    }
-                    Err(err) => {
-                        dbg!("unreachable code");
-                        dbg!(err);
-                    }
+                if let Ok(mut cached_files) = self.cached_files.write() {
+                    cached_files.insert(file_name, cached_file);
                 }
             }
         }
@@ -405,16 +368,8 @@ impl StaticFiles {
 
     /// Clear cache. It's calling when updating cache and no directory on the disk.
     fn clear(&self) {
-        match self.cached_files.write() {
-            Ok(mut cached_files) => {
-                //=-=-=-=-=-=-=-=-=-=
-                cached_files.clear();
-                //=-=-=-=-=-=-=-=-=-=
-            }
-            Err(err) => {
-                dbg!("unreachable code");
-                dbg!(err);
-            }
+        if let Ok(mut cached_files) = self.cached_files.write() {
+            cached_files.clear();
         }
     }
 }

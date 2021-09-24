@@ -8,7 +8,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = Server::new(&addr)?;
     server.run(move |server_event| {
-        if let Event::Connected(tcp_session) = server_event {
+        if let Event::Incoming(tcp_session) = server_event {
             tcp_session.to_http(|http_result| {
                 on_request(http_result?)
             })

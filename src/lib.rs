@@ -2,7 +2,6 @@
 
 pub mod tcp_session;
 pub mod http_result;
-pub mod websocket_session;
 pub mod cookie;
 pub mod tls;
 pub mod mime;

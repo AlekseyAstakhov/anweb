@@ -1,6 +1,5 @@
 use anweb::server;
 use anweb::server::Server;
-use anweb::websocket::frame;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = ([0, 0, 0, 0], 8080).into();
@@ -9,7 +8,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     server.settings.web_settings.websocket_payload_limit = 10000;
 
     server.run(|server_event| {
-        if let server::Event::Connected(tcp_session) = server_event {
+        if let server::Event::Incoming(tcp_session) = server_event {
             tcp_session.to_http(|http_result| {
                 let mut request = http_result?;
                 match request.path() {
@@ -19,11 +18,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "/ws" => {
                         // Try process websocket handshake request and switch connection
                         // to websocket mode, it will no longer process http requests.
-                        request.accept_websocket(vec![], |websocket_result, mut websocket_session| {
+                        request.accept_websocket(vec![], |websocket_result, websocket| {
                             // This callback will be called if a new frame arrives from the client
                             // or an error occurs.
                             let received_frame = websocket_result?;
-                            websocket_session.send(&frame(received_frame.opcode(), received_frame.payload()));
+                            websocket.send(received_frame.opcode(), received_frame.payload());
                             // Need return Ok(()) from this callback.
                             // If you return any error then the tcp connection will be closed.
                             Ok(())

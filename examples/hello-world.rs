@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Calling the 'run' function will result in an endless loop of waiting for activity such
     // as clients connecting or read/write ready.
     server.run(move |server_event| {
-        if let Event::Connected(tcp_session) = server_event {
+        if let Event::Incoming(tcp_session) = server_event {
             // Start using TCP connection for http
             tcp_session.to_http(|request| {
                 // This callback receives a http requests

@@ -50,7 +50,18 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
 
         response.extend_from_slice(self.content);
 
+        let need_close_after_response =
+            if let Some(keep_alive_connection) = self.keep_alive_connection {
+                !keep_alive_connection
+            } else {
+                need_close_by_request(&self.request.request_data)
+            };
+
         self.request.tcp_session().send(&response);
+
+        if need_close_after_response {
+            self.request.tcp_session().close_after_send();
+        }
     }
 
     /// Set any type content.
@@ -411,9 +422,56 @@ pub static HTTP_CODES_WITH_NAME_BY_CODE: &[(u16, &str)] = &[
     (511, "511 Network Authentication Required"),
 ];
 
+/// Determines whether to close the connection after responding by the content of the request.
+pub fn need_close_by_request(request: &ReceivedRequest) -> bool {
+    if let Some(connection_type) = &request.connection_type() {
+        if let ConnectionType::Close = connection_type {
+            return true;
+        }
+    } else {
+        // by default in HTTP/1.0 connection close but in HTTP/1.1 keep-alive
+        if let HttpVersion::Http1_0 = request.version() {
+            return true;
+        }
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_version() {
+        let mut request = ReceivedRequest::new();
+        request.version = HttpVersion::Http1_0;
+        request.connection_type = Some(ConnectionType::Close);
+        assert_eq!(need_close_by_request(&request), true);
+
+        request.version = HttpVersion::Http1_0;
+        request.connection_type = Some(ConnectionType::KeepAlive);
+        assert_eq!(need_close_by_request(&request), false);
+
+        // by default in HTTP/1.0 connection close
+        request.version = HttpVersion::Http1_0;
+        request.connection_type = None;
+        assert_eq!(need_close_by_request(&request), true);
+
+        request.version = HttpVersion::Http1_1;
+        request.connection_type = Some(ConnectionType::Close);
+        assert_eq!(need_close_by_request(&request), true);
+
+        request.version = HttpVersion::Http1_1;
+        request.connection_type = Some(ConnectionType::KeepAlive);
+        assert_eq!(need_close_by_request(&request), false);
+
+        // by default in HTTP/1.1 connection keep-alive
+        request.version = HttpVersion::Http1_1;
+        request.connection_type = None;
+        assert_eq!(need_close_by_request(&request), false);
+    }
+
     #[test]
     fn http_code_name_test() {
         for t in HTTP_CODES_WITH_NAME_BY_CODE {

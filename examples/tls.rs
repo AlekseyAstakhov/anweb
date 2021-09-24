@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_redirect_server("https://127.0.0.1:8443/", redirect_addr, 4)?;
 
     server.run(|server_event| match server_event {
-        server::Event::Connected(tcp_session) => {
+        server::Event::Incoming(tcp_session) => {
             tcp_session.to_http(|http_result| {
                 let request = http_result?;
                 request.response(200).text("Hello world!").send();

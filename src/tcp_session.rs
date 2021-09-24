@@ -1,5 +1,5 @@
 use crate::http_result::{HttpResult, HttpError};
-use crate::websocket_session::{WebsocketSession, WebsocketResult, WebsocketError};
+use crate::websocket::{Websocket, WebsocketResult, WebsocketError};
 use rustls::Session;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -36,9 +36,15 @@ impl TcpSession {
         self.inner.send_arc(data);
     }
 
-    /// Close of client socket. After clossing will be generated `sever::Event::Disconnected`.
-    pub fn disconnect(&self) {
-        self.inner.disconnect();
+    /// To close client socket after all data sent.
+    /// After closing will be generated `server::Event::Disconnected`.
+    pub fn close_after_send(&self) {
+        self.inner.need_close_after_sending.store(true, Ordering::SeqCst);
+    }
+
+    /// Close of client socket. After closing will be generated `server::Event::Disconnected`.
+    pub fn close(&self) {
+        self.inner.close();
     }
 
     /// Sets callback that will be called when data is read from tcp stream.
@@ -59,8 +65,8 @@ impl TcpSession {
     }
 
     /// Need close of client socket.
-    pub(crate) fn need_disconnect(&self) -> bool {
-        self.inner.need_disconnect.load(Ordering::SeqCst)
+    pub(crate) fn need_close(&self) -> bool {
+        self.inner.need_close.load(Ordering::SeqCst)
     }
 
     /// Return true if client connection is using for receiving http requests and send responses.
@@ -73,7 +79,7 @@ impl TcpSession {
         if let Ok(mut callback) = self.inner.http_request_callback.lock() {
             if let Some(callback) = &mut *callback {
                 if callback(request).is_err() {
-                    self.disconnect();
+                    self.close();
                 }
             }
         }
@@ -83,8 +89,8 @@ impl TcpSession {
     pub(crate) fn call_websocket_callback(&self, frame: WebsocketResult) {
         if let Ok(mut callback) = self.inner.websocket_callback.lock() {
             if let Some(callback) = &mut *callback {
-                if callback(frame, WebsocketSession { inner: self.inner.clone() }).is_err() {
-                    self.disconnect();
+                if callback(frame, Websocket { tcp_session: self.clone() }).is_err() {
+                    self.close();
                 }
             }
         }
@@ -104,11 +110,11 @@ impl TcpSession {
                 is_http_mode: Arc::new(AtomicBool::new(false)),
                 websocket_callback: Mutex::new(None),
                 content_callback: Mutex::new(None),
-                need_disconnect: AtomicBool::new(false),
+                need_close: AtomicBool::new(false),
                 surpluses_to_write: Mutex::new(Vec::new()),
                 mio_poll,
                 http_date_string,
-                need_disconnect_after_http_response: Arc::new(AtomicBool::new(false)),
+                need_close_after_sending: Arc::new(AtomicBool::new(false)),
             }),
         }
     }
@@ -134,7 +140,7 @@ impl TcpSession {
                     }
                 }
 
-                self.disconnect();
+                self.close();
                 return;
             }
 
@@ -159,14 +165,14 @@ impl TcpSession {
                             // will write latter when writeable
                             break;
                         } else if err.kind() == std::io::ErrorKind::ConnectionReset {
-                            self.disconnect();
+                            self.close();
                         } else {
                             if self.is_http_mode() {
                                 self.call_http_callback(Err(HttpError::StreamError(err)));
                             } else {
                                 self.call_websocket_callback(Err(WebsocketError::StreamError(err)));
                             }
-                            self.disconnect();
+                            self.close();
                         }
                     }
                 }
@@ -179,8 +185,8 @@ impl TcpSession {
                     match self.inner.mio_poll.reregister(&*stream, mio::Token(self.inner.slab_key), mio::Ready::readable(), mio::PollOpt::level()) {
                         Ok(()) => {
                             // all data sent, switch to read mode
-                            if self.is_http_mode() && self.inner.need_disconnect_after_http_response.load(Ordering::SeqCst) {
-                                self.disconnect();
+                            if self.inner.need_close_after_sending.load(Ordering::SeqCst) {
+                                self.close();
                             }
 
                             return;
@@ -195,11 +201,11 @@ impl TcpSession {
                     }
                 }
 
-                self.disconnect();
+                self.close();
             }
         } else {
             dbg!("unreachable code");
-            self.disconnect();
+            self.close();
         }
     }
 }
@@ -247,7 +253,7 @@ pub(crate) struct InnerTcpSession {
     /// Callback function that is called when content of HTTP request is fully received or error receiving it.
     pub(crate) content_callback: Mutex<Option<(Box<dyn FnMut(&[u8]/*data part*/, ContentIsComplite) -> Result<(), Box<dyn std::error::Error>> + Send>, Option<Request>)>>,
     /// Callback function that is called when a new websocket frame is received or error receiving it.
-    pub(crate) websocket_callback: Mutex<Option<Box<dyn FnMut(WebsocketResult, WebsocketSession) -> Result<(), WebsocketError> + Send>>>,
+    pub(crate) websocket_callback: Mutex<Option<Box<dyn FnMut(WebsocketResult, Websocket) -> Result<(), WebsocketError> + Send>>>,
 
     /// Data that was not written in one write operation and is waiting for the socket to be ready.
     surpluses_to_write: Mutex<Vec<SurplusForWrite>>,
@@ -256,13 +262,13 @@ pub(crate) struct InnerTcpSession {
     mio_poll: Arc<mio::Poll>,
 
     /// Determines whether to close connection. Connection will be closed when all other connections with read/write readiness are processing completed.
-    need_disconnect: AtomicBool,
+    need_close: AtomicBool,
 
     /// Prepared rfc7231 string for http responses, update once per second.
     pub(crate) http_date_string: Arc<RwLock<String>>,
 
     /// For close the connection after the http response.
-    pub(crate) need_disconnect_after_http_response: Arc<AtomicBool>,
+    need_close_after_sending: Arc<AtomicBool>,
 }
 
 /// Data that was not written in one write operation and is waiting for the socket to be ready.
@@ -364,8 +370,8 @@ impl InnerTcpSession {
                     self.send_later(SurplusForWrite { data: Arc::new(data[cnt..].to_vec()), write_yet_cnt: 0 });
                 } else {
                     // all data is written
-                    if self.is_http_mode() && self.need_disconnect_after_http_response.load(Ordering::SeqCst) {
-                        self.disconnect();
+                    if self.need_close_after_sending.load(Ordering::SeqCst) {
+                        self.close();
                     }
                 }
             }
@@ -373,9 +379,9 @@ impl InnerTcpSession {
                 if err.kind() == std::io::ErrorKind::WouldBlock {
                     self.send_later(SurplusForWrite { data: Arc::new(data.to_vec()), write_yet_cnt: 0 });
                 } else if err.kind() == std::io::ErrorKind::ConnectionReset {
-                    self.disconnect();
+                    self.close();
                 } else {
-                    self.disconnect();
+                    self.close();
                     dbg!(err);
                 }
             }
@@ -387,7 +393,7 @@ impl InnerTcpSession {
         if let Ok(mut supluses) = self.surpluses_to_write.lock() {
             // already writing, add to the recording queue
             if !supluses.is_empty() {
-                supluses.push(SurplusForWrite { data: Arc::clone(data), write_yet_cnt: 0 });
+                supluses.push(SurplusForWrite { data: data.clone(), write_yet_cnt: 0 });
                 return;
             }
         }
@@ -398,8 +404,8 @@ impl InnerTcpSession {
                     self.send_later(SurplusForWrite { data: Arc::clone(data), write_yet_cnt: cnt });
                 } else {
                     // all data is written
-                    if self.is_http_mode() && self.need_disconnect_after_http_response.load(Ordering::SeqCst) {
-                        self.disconnect();
+                    if self.is_http_mode() && self.need_close_after_sending.load(Ordering::SeqCst) {
+                        self.close();
                     }
                 }
             }
@@ -407,9 +413,9 @@ impl InnerTcpSession {
                 if err.kind() == std::io::ErrorKind::WouldBlock {
                     self.send_later(SurplusForWrite { data: Arc::clone(data), write_yet_cnt: 0 });
                 } else if err.kind() == std::io::ErrorKind::ConnectionReset {
-                    self.disconnect();
+                    self.close();
                 } else {
-                    self.disconnect();
+                    self.close();
                     dbg!(err);
                 }
             }
@@ -427,7 +433,7 @@ impl InnerTcpSession {
                     }
                     Err(err) => {
                         dbg!(err);
-                        self.disconnect();
+                        self.close();
                         return;
                     }
                 }
@@ -435,12 +441,12 @@ impl InnerTcpSession {
         }
 
         dbg!("unreachable code");
-        self.disconnect();
+        self.close();
     }
 
     /// Close of client socket. After clossing will be generated `sever::Event::Disconnected`.
-    pub fn disconnect(&self) {
-        self.need_disconnect.store(true, Ordering::SeqCst);
+    pub fn close(&self) {
+        self.need_close.store(true, Ordering::SeqCst);
     }
 
     fn write(&self, buf: &[u8]) -> io::Result<usize> {

@@ -1,5 +1,3 @@
-use crate::web_session;
-use crate::web_session::WebSession;
 use crate::server::{Error, Event, Settings};
 use crate::tcp_session::TcpSession;
 
@@ -10,6 +8,8 @@ use std::panic;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
+use crate::web_session;
+use crate::web_session::WebSession;
 
 /// Single threaded TCP server designed for use as an HTTP server.
 pub struct Worker {
@@ -67,7 +67,7 @@ impl Worker {
 
     /// Poll mio, process MIO events, read data processing (parse HTTP, etc.), generate events and do some based on user response to event.
     pub fn poll(&mut self, timeout: Option<Duration>, event_callback: &mut (dyn FnMut(Event))) {
-        self.remove_disconnected(event_callback);
+        self.remove_if_need_close(event_callback);
 
         let poll_res = self.mio_poll.poll(&mut self.events, timeout);
         if let Err(err) = poll_res {
@@ -106,9 +106,9 @@ impl Worker {
                         let tcp_session = TcpSession::new(session_id, slab_key, stream, addr, rustls_session, self.mio_poll.clone(), self.http_date_string.clone());
                         let web_session = WebSession::new(tcp_session.clone());
 
-                        event_callback(Event::Connected(tcp_session.clone()));
+                        event_callback(Event::Incoming(tcp_session.clone()));
 
-                        if tcp_session.need_disconnect() {
+                        if tcp_session.need_close() {
                             continue;
                         }
 
@@ -120,7 +120,7 @@ impl Worker {
                             Err(err) => {
                                 let err = std::io::Error::new(ErrorKind::Other, format!("{}", err));
                                 event_callback(Event::Error(Error::RegisterError(err)));
-                                event_callback(Event::Disconnected(session_id));
+                                event_callback(Event::Closed(session_id));
                                 continue;
                             }
                         }
@@ -131,7 +131,7 @@ impl Worker {
                             }
                             Err(err) => {
                                 event_callback(Event::Error(Error::RegisterError(err)));
-                                event_callback(Event::Disconnected(session_id));
+                                event_callback(Event::Closed(session_id));
                             }
                         }
                     }
@@ -152,7 +152,7 @@ impl Worker {
                             if catch_result.is_err() {
                                 need_remove = Some(session.tcp_session.id());
                                 event_callback(Event::Error(Error::Panicked(session.tcp_session.id())));
-                            } else if session.tcp_session.need_disconnect() {
+                            } else if session.tcp_session.need_close() {
                                 need_remove = Some(session.tcp_session.id());
                             }
                         }
@@ -162,7 +162,7 @@ impl Worker {
                         if let Some(session) = self.web_sessions.get_mut(token_id) {
                             session.tcp_session.send_yet();
 
-                            if session.tcp_session.need_disconnect() {
+                            if session.tcp_session.need_close() {
                                 need_remove = Some(session.tcp_session.id());
                             }
                         }
@@ -170,18 +170,18 @@ impl Worker {
 
                     if let Some(session_id) = need_remove {
                         self.web_sessions.remove(token_id);
-                        event_callback(Event::Disconnected(session_id));
+                        event_callback(Event::Closed(session_id));
                     }
                 }
             }
         }
     }
 
-    /// Remove disconnected sessions.
-    fn remove_disconnected(&mut self, event_callback: &mut (dyn FnMut(Event))) {
+    /// Removes sessions that no need.
+    fn remove_if_need_close(&mut self, event_callback: &mut (dyn FnMut(Event))) {
         self.web_sessions.retain(|_, web_session| {
-            if web_session.tcp_session.need_disconnect() {
-                event_callback(Event::Disconnected(web_session.tcp_session.id()));
+            if web_session.tcp_session.need_close() {
+                event_callback(Event::Closed(web_session.tcp_session.id()));
                 return false;
             }
 

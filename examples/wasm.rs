@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = Server::new(&addr)?;
     server.run(move |server_event| {
-        if let Event::Connected(tcp_session) = server_event {
+        if let Event::Incoming(tcp_session) = server_event {
             let wasm_file_data = wasm_file_data.clone();
             tcp_session.to_http(move |http_result| {
                 let request = http_result?;

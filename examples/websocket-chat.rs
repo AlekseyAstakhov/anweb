@@ -2,15 +2,14 @@ use anweb::redirect_server::run_redirect_server;
 use anweb::server;
 use anweb::server::Server;
 use anweb::tls::{load_certs, load_private_key};
-use anweb::websocket::{frame, handshake_response, ParsedFrame, TEXT_OPCODE};
-use anweb::websocket_session::WebsocketSession;
+use anweb::websocket::{frame, handshake_response, ParsedFrame, TEXT_OPCODE, Websocket};
 use rustls::{NoClientAuth, ServerConfig};
 use std::collections::btree_map::BTreeMap;
 use std::str::from_utf8;
 use std::sync::{Arc, Mutex, RwLock};
 
 struct Chat {
-    users: RwLock<BTreeMap<u64 /*tcp session id*/, WebsocketSession>>,
+    users: RwLock<BTreeMap<u64 /*tcp session id*/, Websocket>>,
     messages: Mutex<Vec<String>>,
 }
 
@@ -37,7 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     server.run(move |server_event| {
         match server_event {
-            server::Event::Connected(tcp_session) => {
+            server::Event::Incoming(tcp_session) => {
                 let chat = chat.clone();
                 tcp_session.to_http(move |http_result| {
                     let mut request = http_result?;
@@ -60,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             })?;
 
                             let mut users = chat.users.write().unwrap();
-                            users.insert(websocket.id(), websocket.clone());
+                            users.insert(websocket.tcp_session().id(), websocket.clone());
                         }
                         _ => {
                             request.response(404).text("404 page not found").send();
@@ -70,7 +69,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Ok(())
                 });
             }
-            server::Event::Disconnected(sesion_id) => {
+            server::Event::Closed(sesion_id) => {
                 if let Ok(mut users) = chat.users.write() {
                     users.remove(&sesion_id);
                 }
@@ -88,9 +87,9 @@ fn on_websocket_frame(received_frame: &ParsedFrame, chat: &Chat) {
             let mut messages = chat.messages.lock().unwrap();
             messages.push(text.to_string());
             let users = chat.users.read().unwrap();
-            for (_, websocket_session) in users.iter() {
-                let mut websocket_session = websocket_session.clone();
-                websocket_session.send(&frame(TEXT_OPCODE, text.as_bytes()));
+            for (_, websocket) in users.iter() {
+                let websocket = websocket.clone();
+                websocket.send(TEXT_OPCODE, text.as_bytes());
             }
         }
     }

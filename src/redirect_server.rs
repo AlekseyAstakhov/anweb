@@ -20,7 +20,7 @@ pub fn run_redirect_server(path: &'static str, server_addr: SocketAddr, num_thre
 
         spawn(move || {
             server.run(&mut |server_event| {
-                if let server::Event::Connected(tcp_session) = server_event {
+                if let server::Event::Incoming(tcp_session) = server_event {
                     let path = path.clone();
                     tcp_session.to_http(move |http_request| {
                         http_request?.response(303).location(&path).close().send();
