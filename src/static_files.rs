@@ -183,7 +183,7 @@ impl StaticFiles {
                         request.tcp_session().send(&response);
                     } else {
                         request.tcp_session().send(&response);
-                        request.tcp_session().send(&content);
+                        request.tcp_session().send_arc(content);
                     }
                 }
                 None => {
