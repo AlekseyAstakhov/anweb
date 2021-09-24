@@ -104,6 +104,7 @@ impl Worker {
                         };
 
                         let tcp_session = TcpSession::new(client_id, slab_key, stream, addr, rustls_session, self.mio_poll.clone(), self.http_date_string.clone());
+                        let tcp_client = TcpClient::new(tcp_session.clone());
 
                         event_callback(Event::Connected(tcp_session.clone()));
 
@@ -126,7 +127,7 @@ impl Worker {
 
                         match register_result {
                             Ok(()) => {
-                                self.tcp_clients.insert(TcpClient::new(tcp_session.clone()));
+                                self.tcp_clients.insert(tcp_client);
                             }
                             Err(err) => {
                                 event_callback(Event::Error(Error::RegisterError(err)));
