@@ -2,7 +2,7 @@ use anweb::redirect_server::run_redirect_server;
 use anweb::server;
 use anweb::server::Server;
 use anweb::tls::{load_certs, load_private_key};
-use anweb::websocket::{frame, handshake_response, ParsedFrame, TEXT_OPCODE, Websocket};
+use anweb::websocket::{frame, handshake_response, Frame, TEXT_OPCODE, Websocket};
 use rustls::{NoClientAuth, ServerConfig};
 use std::collections::btree_map::BTreeMap;
 use std::str::from_utf8;
@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn on_websocket_frame(received_frame: &ParsedFrame, chat: &Chat) {
+fn on_websocket_frame(received_frame: &Frame, chat: &Chat) {
     if received_frame.is_text() {
         if let Ok(text) = from_utf8(received_frame.payload()) {
             let mut messages = chat.messages.lock().unwrap();

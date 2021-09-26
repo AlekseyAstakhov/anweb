@@ -61,13 +61,14 @@ impl Websocket {
         self.tcp_session.close()
     }
 
+    /// Returns reference to the TCP session of this websocket.
     pub fn tcp_session(&self) -> &TcpSession {
         &self.tcp_session
     }
 }
 
 /// Received websocket frame or error receiving it
-pub type WebsocketResult<'a> = Result<&'a ParsedFrame, WebsocketError>;
+pub type WebsocketResult<'a> = Result<&'a Frame, WebsocketError>;
 
 /// Error of websocket such as parsing frame or read from socket.
 pub enum WebsocketError {
@@ -104,7 +105,7 @@ pub fn frame(opcode: u8, payload: &[u8]) -> Vec<u8> {
 /// The parser need to be recreated only after error! Here is not all of things from RFC: 6455
 pub struct Parser {
     state: ParserState,
-    frame: ParsedFrame,
+    frame: Frame,
 }
 
 impl Parser {
@@ -114,7 +115,7 @@ impl Parser {
     }
 
     /// Add incoming data for processing.
-    pub fn parse_yet(&mut self, tmp_buf: &[u8], payload_limit: usize) -> Result<Option<(ParsedFrame, Vec<u8>)>, ParseFrameError> {
+    pub fn parse_yet(&mut self, tmp_buf: &[u8], payload_limit: usize) -> Result<Option<(Frame, Vec<u8>)>, ParseFrameError> {
         self.frame.buf.extend_from_slice(tmp_buf);
         loop {
             match self.state {
@@ -215,7 +216,7 @@ impl Parser {
                 ParserState::LoadPayloadData => {
                     let frame_len = self.frame.payload_index + self.frame.payload_len;
                     if self.frame.buf.len() >= frame_len {
-                        let mut result = ParsedFrame::new();
+                        let mut result = Frame::new();
                         std::mem::swap(&mut result, &mut self.frame);
 
                         let surplus = result.buf[frame_len..].to_vec();
@@ -250,7 +251,7 @@ impl Parser {
 /// Parsed websocket frame. See RFC: 6455 section 5.2, Base Framing Protocol.
 /// No mask because server accept only frames where mask==1.
 #[derive(Debug)]
-pub struct ParsedFrame {
+pub struct Frame {
     /// First bit of first byte.
     /// Indicates that this is the final fragment in a message.
     /// The first fragment MAY also be the final fragment.
@@ -272,7 +273,7 @@ pub struct ParsedFrame {
     masking_key_index: usize,
 }
 
-impl ParsedFrame {
+impl Frame {
     /// Payload.
     pub fn payload(&self) -> &[u8] {
         &self.buf[self.payload_index..self.payload_index + self.payload_len]
@@ -328,7 +329,7 @@ impl ParsedFrame {
 
     /// Conditionally uninitialized frame data.
     fn new() -> Self {
-        ParsedFrame {
+        Frame {
             fin: false,
             opcode: 0,
             buf: Vec::new(),
@@ -357,7 +358,7 @@ pub enum ParseFrameError {
 impl Default for Parser {
     fn default() -> Self {
         Parser {
-            frame: ParsedFrame::new(),
+            frame: Frame::new(),
             state: ParserState::ParseFirstByteWhereFinAndOpcode,
         }
     }
