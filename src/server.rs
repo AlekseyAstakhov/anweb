@@ -4,7 +4,7 @@ use crate::web_session;
 
 use mio::net::TcpListener;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
@@ -60,12 +60,12 @@ pub struct Server {
     /// MOI tcp listener.
     tcp_listener: TcpListener,
     /// Number of worker thread. Defaults to the number of available CPUs of the current system. You can change this value before starting server (before call 'run').
-    pub num_threads: usize,
+    num_threads: usize,
     /// Settings of this server such as tls, http parsing, websockets and etc.
     pub settings: Settings,
 
     /// For stop the server.
-    pub stopper: Arc<AtomicBool>,
+    stopper: Stopper,
 }
 
 impl Server {
@@ -85,7 +85,7 @@ impl Server {
                 tls_config: None,
                 web_settings: web_session::Settings::default(),
             },
-            stopper: Arc::new(AtomicBool::new(false)),
+            stopper: Stopper { need_stop: Arc::new(AtomicBool::new(false)) },
         }
     }
 
@@ -109,11 +109,11 @@ impl Server {
 
             match Worker::new_from_listener(cloned_tcp_listener, self.stopper.clone()) {
                 Ok(mut worker) => {
-                    self.workers.push(std::thread::spawn(move || {
-                        worker.connections_counter = connections_counter;
-                        worker.settings = settings;
-                        worker.run(&mut |event| event_callback(event));
-                    }));
+                     self.workers.push(std::thread::spawn(move || {
+                         worker.connections_counter = connections_counter;
+                         worker.settings = settings;
+                         worker.run(&mut |event| event_callback(event));
+                     }));
                 }
                 Err(err) => {
                     event_callback(Event::Error(Error::WorkerNotCreated(err)));
@@ -130,5 +130,28 @@ impl Server {
         }
 
         Ok(())
+    }
+
+    pub fn stopper(&self) -> Stopper {
+        self.stopper.clone()
+    }
+}
+
+#[derive(Clone)]
+pub struct Stopper {
+    need_stop: Arc<AtomicBool>,
+}
+
+impl Stopper {
+    pub fn stop(&self) {
+        self.need_stop.store(true, Ordering::SeqCst);
+    }
+
+    pub fn need_stop(&self) -> bool {
+        self.need_stop.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn new() -> Self {
+        Self { need_stop: Arc::new(AtomicBool::new(false)) }
     }
 }

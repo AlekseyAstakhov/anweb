@@ -1,4 +1,4 @@
-use crate::server::{Error, Event, Settings};
+use crate::server::{Error, Event, Settings, Stopper};
 use crate::tcp_session::TcpSession;
 
 use mio::net::TcpListener;
@@ -23,7 +23,7 @@ pub struct Worker {
     pub settings: Settings,
 
     /// For stop the server.
-    pub stopper: Arc<AtomicBool>,
+    pub stopper: Stopper,
 
     mio_poll: Arc<mio::Poll>,
     events: mio::Events,
@@ -38,7 +38,7 @@ pub struct Worker {
 
 impl Worker {
     /// Tries to start the server and returns it as a result.
-    pub fn new_from_listener(tcp_listener: TcpListener, stopper: Arc<AtomicBool>) -> Result<Worker, std::io::Error> {
+    pub fn new_from_listener(tcp_listener: TcpListener, stopper: Stopper) -> Result<Worker, std::io::Error> {
         let mio_poll = mio::Poll::new()?;
 
         mio_poll.register(&tcp_listener, LISTENER_TOKEN, mio::Ready::readable(), mio::PollOpt::level())?;
@@ -81,7 +81,7 @@ impl Worker {
     /// Run server. See 'poll'.
     pub fn run(&mut self, event_callback: &mut (dyn FnMut(Event))) {
         loop {
-            if self.stopper.load(Ordering::SeqCst) {
+            if self.stopper.need_stop() {
                 break;
             }
 

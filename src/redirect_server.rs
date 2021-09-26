@@ -2,15 +2,15 @@ use crate::server;
 use crate::worker::Worker;
 use mio::net::TcpListener;
 use std::net::SocketAddr;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::thread::spawn;
+use crate::server::Stopper;
 
 /// Run http server in own thread. Send redirect response to any request.
 pub fn run_redirect_server(path: &'static str, server_addr: SocketAddr, num_thread: usize) -> Result<(), std::io::Error> {
     let tcp_listener = TcpListener::bind(&server_addr)?;
 
-    let stopper = Arc::new(AtomicBool::new(false));
+    let stopper = Stopper::new();
 
     for _ in 0..num_thread {
         let cloned_tcp_listener = tcp_listener.try_clone()?;
