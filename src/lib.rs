@@ -16,3 +16,6 @@ pub mod websocket;
 pub mod worker;
 mod web_session;
 mod request_parser;
+
+#[cfg(test)]
+mod tests;

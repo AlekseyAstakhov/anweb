@@ -18,7 +18,11 @@ pub fn handshake_response(request: &ReceivedRequest) -> Result<Vec<u8>, Handshak
         let accept_sha1 = hasher.result();
         let accept = base64::encode(&accept_sha1);
 
-        let protocol = if let Some(protocol) = request.header_value("Sec-WebSocket-Protocol") { format!("Sec-WebSocket-Protocol: {}\r\n", &protocol) } else { String::new() };
+        let protocol = if let Some(protocol) = request.header_value("Sec-WebSocket-Protocol") {
+            format!("Sec-WebSocket-Protocol: {}\r\n", &protocol)
+        } else {
+            String::new()
+        };
 
         let response = format!(
             "{} 101 Switching Protocols\r\n\
@@ -117,7 +121,6 @@ impl Parser {
                 ParserState::ParseFirstByteWhereFinAndOpcode => {
                     if !self.frame.buf.is_empty() {
                         let first_byte = self.frame.buf[0];
-                        self.frame.first_byte = first_byte;
                         self.frame.fin = first_byte & 0b1000_0000 > 0;
                         self.frame.opcode = first_byte & 0b0000_1111;
                         match self.frame.opcode {
@@ -135,7 +138,8 @@ impl Parser {
                     if self.frame.buf.len() > 1 {
                         let second_byte = self.frame.buf[1];
                         let mask = second_byte & 0b1000_0000;
-                        // RFC: 6455 section 5.1: server must disconnect from a client if that client sends an unmasked message
+                        // RFC: 6455 section 5.1: server must disconnect from a client
+                        // if that client sends an unmasked message
                         if mask == 0 {
                             return Err(ParseFrameError::UnmaskedClientMaessage);
                         }
@@ -217,7 +221,8 @@ impl Parser {
                         let surplus = result.buf[frame_len..].to_vec();
                         result.buf.truncate(frame_len);
 
-                        // mask is checked early. RFC: 6455 section 5.1: server must disconnect from a client if that client sends an unmasked message
+                        // mask is checked early. RFC: 6455 section 5.1: server must disconnect
+                        // from a client if that client sends an unmasked message
                         let mut mask = [0; 4];
                         mask.clone_from_slice(result.mask().unwrap_or_else(|| {
                             dbg!("unreachable code");
@@ -242,16 +247,19 @@ impl Parser {
     }
 }
 
-/// Parse websocket frame. See RFC: 6455 section 5.2, Base Framing Protocol. No mask because server accept only frames where mask==1.
+/// Parsed websocket frame. See RFC: 6455 section 5.2, Base Framing Protocol.
+/// No mask because server accept only frames where mask==1.
 #[derive(Debug)]
 pub struct ParsedFrame {
-    /// FIN: First bit of first byte. Indicates that this is the final fragment in a message. The first fragment MAY also be the final fragment.
+    /// First bit of first byte.
+    /// Indicates that this is the final fragment in a message.
+    /// The first fragment MAY also be the final fragment.
     fin: bool,
-    /// opcode: Last 4 bits of first byte. Defines the interpretation of the "Payload data". If an unknown opcode is received, the receiving endpoint MUST _Fail the WebSocket Connection_.
+    /// Last 4 bits of first byte.
+    /// Defines the interpretation of the "Payload data".
+    /// If an unknown opcode is received, t
+    /// he receiving endpoint MUST _Fail the WebSocket Connection_.
     opcode: u8,
-
-    /// Full first byte of frame.
-    first_byte: u8,
 
     /// Buffer accumulating incoming data.
     buf: Vec<u8>,
@@ -265,17 +273,26 @@ pub struct ParsedFrame {
 }
 
 impl ParsedFrame {
-    /// See RFC: 6455 section 5.2, Base Framing Protocol
+    /// Payload.
     pub fn payload(&self) -> &[u8] {
         &self.buf[self.payload_index..self.payload_index + self.payload_len]
     }
 
-    /// See RFC: 6455 section 5.2, Base Framing Protocol
+    /// First bit of first byte.
+    /// Indicates that this is the final fragment in a message.
+    /// The first fragment MAY also be the final fragment.
+    pub fn fin(&self) -> bool {
+        self.fin
+    }
+
+    /// Last 4 bits of first byte. Defines the interpretation of the "Payload data".
+    /// If an unknown opcode is received,
+    /// the receiving endpoint MUST _Fail the WebSocket Connection_.
     pub fn opcode(&self) -> u8 {
         self.opcode
     }
 
-    /// See RFC: 6455 section 5.2, Base Framing Protocol
+    /// Mask.
     pub fn mask(&self) -> Option<&[u8]> {
         if self.masking_key_index == 0 || self.masking_key_index + 4 > self.buf.len() {
             return None;
@@ -284,6 +301,7 @@ impl ParsedFrame {
         Some(&self.buf[self.masking_key_index..self.masking_key_index + 4])
     }
 
+    /// Raw data buffer of frame.
     pub fn raw(&self) -> &[u8] {
         &self.buf
     }
@@ -313,7 +331,6 @@ impl ParsedFrame {
         ParsedFrame {
             fin: false,
             opcode: 0,
-            first_byte: 0,
             buf: Vec::new(),
             payload_index: 0,
             payload_len: 0,
@@ -366,181 +383,4 @@ impl std::fmt::Display for HandshakeError {
 }
 
 impl std::error::Error for HandshakeError {
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn empty() {
-        let incoming_data = [];
-        let mut parser = Parser::new();
-        if let Ok(result) = parser.parse_yet(&incoming_data, 100) {
-            assert!(result.is_none());
-        } else {
-            assert!(false);
-        }
-    }
-
-    #[test]
-    fn part_of_frame() {
-        let incoming_data = [129, 140, 211, 25, 248, 86];
-        let mut parser = Parser::new();
-        if let Ok(result) = parser.parse_yet(&incoming_data, 100) {
-            assert!(result.is_none());
-        } else {
-            assert!(false);
-        }
-    }
-
-    #[test]
-    fn one_good_frame() {
-        let incoming_data = [129, 140, 211, 25, 248, 86, 155, 124, 148, 58, 188, 57, 143, 57, 161, 117, 156, 119];
-        let mut parser = Parser::new();
-        if let Ok(result) = parser.parse_yet(&incoming_data, 12) {
-            if let Some((frame, surplus)) = result {
-                assert_eq!(frame.fin, true);
-                assert_eq!(frame.opcode, 1);
-                assert_eq!(frame.first_byte, 129);
-                assert_eq!(frame.buf, [129, 140, 211, 25, 248, 86, 72, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100, 33]);
-                assert_eq!(frame.payload_index, 6);
-                assert_eq!(frame.payload_len, 12);
-                assert_eq!(frame.masking_key_index, 2);
-                assert!(frame.is_text());
-                assert_eq!(frame.payload(), b"Hello world!");
-                assert!(surplus.is_empty());
-            } else {
-                // because data contains full frame
-                assert!(false);
-            }
-        } else {
-            assert!(false);
-        }
-    }
-
-    #[test]
-    fn two_good_frame_and_surplus() {
-        let incoming_data = [129, 131, 216, 213, 165, 109, 233, 231, 150];
-        let mut parser = Parser::new();
-        if let Ok(result) = parser.parse_yet(&incoming_data, 100) {
-            if let Some((frame, surplus)) = result {
-                assert_eq!(frame.fin, true);
-                assert_eq!(frame.opcode, 1);
-                assert_eq!(frame.first_byte, 129);
-                assert_eq!(frame.buf, [129, 131, 216, 213, 165, 109, 49, 50, 51]);
-                assert_eq!(frame.payload_index, 6);
-                assert_eq!(frame.payload_len, 3);
-                assert_eq!(frame.masking_key_index, 2);
-                assert_eq!(frame.payload(), b"123");
-                assert!(surplus.is_empty());
-
-                let incoming_data = [129, 134, 6, 145, 169, 18, 103, 243, 202, 118, 99, 247, 129, 137];
-                if let Ok(result) = parser.parse_yet(&incoming_data, 100) {
-                    if let Some((frame, surplus)) = result {
-                        assert_eq!(frame.fin, true);
-                        assert_eq!(frame.opcode, 1);
-                        assert_eq!(frame.first_byte, 129);
-                        assert_eq!(frame.buf, [129, 134, 6, 145, 169, 18, 97, 98, 99, 100, 101, 102]);
-                        assert_eq!(frame.payload_index, 6);
-                        assert_eq!(frame.payload_len, 6);
-                        assert_eq!(frame.masking_key_index, 2);
-                        assert_eq!(frame.payload(), b"abcdef");
-                        assert_eq!(surplus, [129, 137]);
-                    } else {
-                        // because data contains full frame
-                        assert!(false);
-                    }
-                } else {
-                    assert!(false);
-                }
-            } else {
-                // because data contains full frame
-                assert!(false);
-            }
-        } else {
-            assert!(false);
-        }
-    }
-
-    #[test]
-    fn two_good_frame_together_and_surplus() {
-        let incoming_data = [129, 131, 216, 213, 165, 109, 233, 231, 150, 129, 134, 6, 145, 169, 18, 103, 243, 202, 118, 99, 247, 129, 133];
-        let mut parser = Parser::new();
-        if let Ok(result) = parser.parse_yet(&incoming_data, 100) {
-            if let Some((frame, surplus)) = result {
-                assert_eq!(frame.fin, true);
-                assert_eq!(frame.opcode, 1);
-                assert_eq!(frame.first_byte, 129);
-                assert_eq!(frame.buf, [129, 131, 216, 213, 165, 109, 49, 50, 51]);
-                assert_eq!(frame.payload_index, 6);
-                assert_eq!(frame.payload_len, 3);
-                assert_eq!(frame.masking_key_index, 2);
-                assert_eq!(frame.payload(), b"123");
-                assert!(!surplus.is_empty());
-
-                if let Ok(result) = parser.parse_yet(&surplus, 100) {
-                    if let Some((frame, surplus)) = result {
-                        assert_eq!(frame.fin, true);
-                        assert_eq!(frame.opcode, 1);
-                        assert_eq!(frame.first_byte, 129);
-                        assert_eq!(frame.buf, [129, 134, 6, 145, 169, 18, 97, 98, 99, 100, 101, 102]);
-                        assert_eq!(frame.payload_index, 6);
-                        assert_eq!(frame.payload_len, 6);
-                        assert_eq!(frame.masking_key_index, 2);
-                        assert_eq!(frame.payload(), b"abcdef");
-                        assert_eq!(surplus, [129, 133]);
-                    } else {
-                        // because data contains full frame
-                        assert!(false);
-                    }
-                } else {
-                    assert!(false);
-                }
-            } else {
-                // because data contains full frame
-                assert!(false);
-            }
-        } else {
-            assert!(false);
-        }
-    }
-
-    #[test]
-    fn close() {
-        let incoming_data = [136, 130, 149, 71, 232, 208, 3, 233];
-        let mut parser = Parser::new();
-        if let Ok(result) = parser.parse_yet(&incoming_data, 100) {
-            if let Some((frame, surplus)) = result {
-                assert_eq!(frame.fin, true);
-                assert_eq!(frame.opcode, 8);
-                assert!(frame.is_close());
-                assert!(surplus.is_empty());
-            } else {
-                // because data contains full frame
-                assert!(false);
-            }
-        } else {
-            assert!(false);
-        }
-    }
-
-    #[test]
-    fn no_masked_frame_for_send() {
-        assert_eq!(frame(TEXT_OPCODE, &[]), [129, 0]);
-        assert_eq!(frame(BINARY_OPCODE, &[]), [130, 0]);
-        assert_eq!(frame(TEXT_OPCODE, b"1"), [129, 1, 49]);
-        assert_eq!(frame(BINARY_OPCODE, b"1"), [130, 1, 49]);
-        assert_eq!(frame(TEXT_OPCODE, b"abcdef"), [129, 6, 97, 98, 99, 100, 101, 102]);
-        assert_eq!(frame(BINARY_OPCODE, b"abcdef"), [130, 6, 97, 98, 99, 100, 101, 102]);
-    }
-
-    #[test]
-    fn payload_len_limit() {
-        let incoming_data = [129, 140, 211, 25, 248, 86, 155, 124, 148, 58, 188, 57, 143, 57, 161, 117, 156, 119];
-        let mut parser = Parser::new();
-        if let Err(_) = parser.parse_yet(&incoming_data, 11) {
-            assert!(true);
-        }
-    }
 }
