@@ -2,7 +2,6 @@ use crate::server;
 use crate::worker::Worker;
 use mio::net::TcpListener;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::thread::spawn;
 use crate::server::Stopper;
 

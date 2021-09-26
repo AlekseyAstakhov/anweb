@@ -5,7 +5,7 @@ use mio::net::TcpListener;
 use slab::Slab;
 use std::io::ErrorKind;
 use std::panic;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use crate::web_session;
