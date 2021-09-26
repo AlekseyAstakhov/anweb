@@ -57,11 +57,11 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
                 need_close_by_request(&self.request.request_data)
             };
 
-        self.request.tcp_session().send(&response);
-
         if need_close_after_response {
             self.request.tcp_session().close_after_send();
         }
+
+        self.request.tcp_session().send(&response);
     }
 
     /// Set any type content.

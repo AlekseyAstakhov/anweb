@@ -60,7 +60,7 @@ pub struct Server {
     /// MOI tcp listener.
     tcp_listener: TcpListener,
     /// Number of worker thread. Defaults to the number of available CPUs of the current system. You can change this value before starting server (before call 'run').
-    num_threads: usize,
+    pub num_threads: usize,
     /// Settings of this server such as tls, http parsing, websockets and etc.
     pub settings: Settings,
 

@@ -182,26 +182,19 @@ impl TcpSession {
 
             if surpluses_for_write.is_empty() {
                 if let Ok(stream) = self.inner.mio_stream.lock() {
-                    match self.inner.mio_poll.reregister(&*stream, mio::Token(self.inner.slab_key), mio::Ready::readable(), mio::PollOpt::level()) {
-                        Ok(()) => {
-                            // all data sent, switch to read mode
-                            if self.inner.need_close_after_sending.load(Ordering::SeqCst) {
-                                self.close();
-                            }
-
-                            return;
-                        }
-                        Err(err) => {
-                            if self.is_http_mode() {
-                                self.call_http_callback(Err(HttpError::StreamError(err)));
-                            } else {
-                                self.call_websocket_callback(Err(WebsocketError::StreamError(err)));
-                            }
+                    if let Err(err) = self.inner.mio_poll.reregister(&*stream, mio::Token(self.inner.slab_key), mio::Ready::readable(), mio::PollOpt::level()) {
+                        if self.is_http_mode() {
+                            self.call_http_callback(Err(HttpError::StreamError(err)));
+                        } else {
+                            self.call_websocket_callback(Err(WebsocketError::StreamError(err)));
                         }
                     }
                 }
 
-                self.close();
+                // all data sent, switch to read mode
+                if self.inner.need_close_after_sending.load(Ordering::SeqCst) {
+                    self.close();
+                }
             }
         } else {
             dbg!("unreachable code");

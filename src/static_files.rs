@@ -140,11 +140,11 @@ impl StaticFiles {
                             if static_file.etag.is_empty() { "".to_string() } else { format!("ETag: {}\r\n", static_file.etag) }
                         ));
 
-                        request.tcp_session.send(&response);
-
                         if need_close_by_request {
                             request.tcp_session.close_after_send();
                         }
+
+                        request.tcp_session.send(&response);
 
                         return;
                     }
@@ -187,14 +187,16 @@ impl StaticFiles {
 
                     if content.len() < self.united_response_limit {
                         response.extend(&content[..]);
+                        if need_close_by_request {
+                            request.tcp_session.close_after_send();
+                        }
                         request.tcp_session().send(&response);
                     } else {
                         request.tcp_session().send(&response);
+                        if need_close_by_request {
+                            request.tcp_session.close_after_send();
+                        }
                         request.tcp_session().send_arc(content);
-                    }
-
-                    if need_close_by_request {
-                        request.tcp_session.close_after_send();
                     }
                 }
                 None => {
