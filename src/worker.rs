@@ -191,7 +191,7 @@ impl Worker {
 }
 
 /// MIO key of server listener.
-const LISTENER_TOKEN: mio::Token = mio::Token(std::usize::MAX - 1);
+const LISTENER_TOKEN: mio::Token = mio::Token(usize::MAX - 1);
 
 /// Returns string date in 7231 format.
 pub fn now_rfc7231_string() -> String {
