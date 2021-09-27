@@ -304,7 +304,12 @@ fn hello_world() {
             assert_eq!(&response[..23], b"HTTP/1.1 200 OK\r\nDate: ");
             assert_eq!(
                 &response[52..],
-                b"\r\nConnection: close\r\nContent-Length: 12\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello world!");
+                b"\r\n\
+                Connection: close\r\n\
+                Content-Length: 12\r\n\
+                Content-Type: text/plain; charset=utf-8\r\n\r\n\
+                Hello world!"
+            );
         }
     );
 }
