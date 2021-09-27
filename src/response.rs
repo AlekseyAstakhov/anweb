@@ -30,7 +30,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
          Date: {}\r\n\
          {}\
          Content-Length: {}\r\n\
-         Content-Type: {}\r\n\
+         {}\
          {}\
          {}\
          {}{}{}\
@@ -75,7 +75,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
     /// Set "text/plain; charset=utf-8" content.
     #[inline(always)]
     pub fn text(&mut self, text: &'a str) -> &mut Self {
-        self.content_type = "text/plain; charset=utf-8";
+        self.content_type = "Content-Type: text/plain; charset=utf-8\r\n";
         self.content = text.as_bytes();
         self
     }
@@ -83,7 +83,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
     /// Set "text/html; charset=utf-8" content.
     #[inline(always)]
     pub fn html(&mut self, html: &'a str) -> &mut Self {
-        self.content_type = "text/html; charset=utf-8";
+        self.content_type = "Content-Type: text/html; charset=utf-8\r\n";
         self.content = html.as_bytes();
         self
     }
@@ -91,7 +91,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
     /// Set "application/wasm" content.
     #[inline(always)]
     pub fn wasm(&mut self, wasm_data: &'a [u8]) -> &mut Self {
-        self.content_type = "application/wasm";
+        self.content_type = "Content-Type: application/wasm\r\n";
         self.content = wasm_data;
         self
     }
