@@ -28,7 +28,7 @@ fn on_request(request: Request) -> Result<(), Box<dyn std::error::Error>> {
         }
         "/form" => {
             if request.method() == "POST" {
-                on_form_post(request);
+                on_post_form(request);
                 return Ok(());
             }
         }
@@ -41,7 +41,7 @@ fn on_request(request: Request) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn on_form_post(request: Request) {
+fn on_post_form(request: Request) {
     if request.has_post_form() {
         // Read content of the request.
         let mut content = vec![];
