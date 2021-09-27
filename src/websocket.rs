@@ -1,6 +1,5 @@
 use crate::request::ReceivedRequest;
 use sha1::{Digest, Sha1};
-use std::u16;
 use crate::tcp_session::TcpSession;
 
 pub const CONTINUATION_OPCODE: u8 = 0x0;
