@@ -1,6 +1,12 @@
 #[cfg(test)]
 use crate::request::{Header, HttpVersion, RequestError};
 use crate::request_parser::{ParseHttpRequestSettings, Parser};
+use crate::server::{Event, Server};
+use std::thread::sleep;
+use std::net::TcpStream;
+use std::io::{Write, Read};
+use std::time::Duration;
+use crate::request::Request;
 
 impl PartialEq for Header {
     fn eq(&self, other: &Self) -> bool {
@@ -32,7 +38,7 @@ fn parse() {
 
     let request_str = "GET / HTTP/1.1\r\nConnection: keep-alive\r\n\r\naaa";
     if let Ok((_request, surplus)) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
-        assert!(surplus.len() == 3);
+        assert_eq!(surplus.len(), 3);
     } else {
         assert!(false);
     }
@@ -216,4 +222,89 @@ fn limits() {
     } else {
         assert!(false);
     }
+}
+
+/// Starts the server on localhost and port 8080, opens the client socket,
+/// makes request ('raw_request') to the server,
+/// calls callback when request is received on server side, reads response,
+/// calls callback when response is received, and stops the server.
+pub fn test_request(raw_request: &str, on_request: impl FnMut(Request)  + Send + Clone + 'static, on_response: impl FnMut(&[u8]) + Send + Clone + 'static) {
+    let server = Server::new(&([0, 0, 0, 0], 8080).into());
+    assert!(server.is_ok());
+    if let Ok(server) = server {
+        let num_threads = server.num_threads;
+        let stopper = server.stopper();
+        let raw_request = raw_request.to_string();
+        let server_run_res = server.run(move |server_event| {
+            match server_event {
+                Event::Incoming(tcp_session) => {
+                    let mut on_request = on_request.clone();
+                    tcp_session.to_http(move |request| {
+                        assert!(request.is_ok());
+                        on_request(request?);
+                        Ok(())
+                    });
+                }
+                Event::Started => {
+                    let stopper = stopper.clone();
+                    let mut on_response = on_response.clone();
+                    let raw_request = raw_request.clone();
+                    std::thread::spawn(move || {
+                        let tcp_stream = TcpStream::connect("127.0.0.1:8080");
+                        assert!(tcp_stream.is_ok());
+                        if let Ok(mut tcp_stream) = tcp_stream {
+                            let res = tcp_stream.set_write_timeout(Some(Duration::from_millis(100)));
+                            assert!(res.is_ok());
+                            let res = tcp_stream.write(raw_request.as_bytes());
+                            assert!(res.is_ok());
+
+                            let mut response: Vec<u8> = Vec::new();
+                            let res = tcp_stream.set_read_timeout(Some(Duration::from_millis(300)));
+                            assert!(res.is_ok());
+                            let res = tcp_stream.read_to_end(&mut response);
+                            assert!(res.is_ok());
+                            on_response(&response);
+
+                            stopper.stop();
+                            for _ in 0..num_threads {
+                                let res = TcpStream::connect("127.0.0.1:8080");
+                                assert!(res.is_ok());
+                                sleep(Duration::from_millis(30));
+                            }
+                        }
+                    });
+                }
+                _ => {}
+            }
+        });
+        assert!(server_run_res.is_ok());
+    }
+}
+
+#[test]
+fn hello_world() {
+    test_request(
+        "GET / HTTP/1.1\r\n\
+                    Host: 127.0.0.1:8080\r\n\
+                    User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0\r\n\
+                    Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8\r\n\
+                    Accept-Language: ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3\r\n\
+                    Accept-Encoding: gzip, deflate\r\n\
+                    Connection: keep-alive\r\n\
+                    Upgrade-Insecure-Requests: 1\r\n\
+                    Sec-Fetch-Dest: document\r\n\
+                    Sec-Fetch-Mode: navigate\r\n\
+                    Sec-Fetch-Site: none\r\n\
+                    Sec-Fetch-User: ?1\r\n\
+                    Cache-Control: max-age=0\r\n\r\n",
+        |request| {
+            request.response(200).close().text("Hello world!").send();
+        },
+        |response| {
+            assert_eq!(&response[..23], b"HTTP/1.1 200 OK\r\nDate: ");
+            assert_eq!(
+                &response[52..],
+                b"\r\nConnection: close\r\nContent-Length: 12\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello world!");
+        }
+    );
 }
