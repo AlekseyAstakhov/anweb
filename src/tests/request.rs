@@ -300,6 +300,7 @@ fn hello_world() {
                     Sec-Fetch-User: ?1\r\n\
                     Cache-Control: max-age=0\r\n\r\n",
         |request| {
+            assert_eq!(request.method(), "GET");
             assert_eq!(request.path(), "/");
             assert_eq!(request.version(), &HttpVersion::Http1_1);
             request.response(200).close().text("Hello world!").send();
