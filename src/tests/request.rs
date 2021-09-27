@@ -224,12 +224,12 @@ fn limits() {
     }
 }
 
-/// Starts the server on localhost and port 8080, opens the client socket,
+/// Starts the server on localhost, opens the client socket,
 /// makes request ('raw_request') to the server,
 /// calls callback when request is received on server side, reads response,
 /// calls callback when response is received, and stops the server.
-pub fn test_request(raw_request: &str, on_request: impl FnMut(Request)  + Send + Clone + 'static, on_response: impl FnMut(&[u8]) + Send + Clone + 'static) {
-    let server = Server::new(&([0, 0, 0, 0], 8080).into());
+pub fn test_request(port: u16, raw_request: &str, on_request: impl FnMut(Request)  + Send + Clone + 'static, on_response: impl FnMut(&[u8]) + Send + Clone + 'static) {
+    let server = Server::new(&([0, 0, 0, 0], port).into());
     assert!(server.is_ok());
     if let Ok(server) = server {
         let num_threads = server.num_threads;
@@ -250,7 +250,8 @@ pub fn test_request(raw_request: &str, on_request: impl FnMut(Request)  + Send +
                     let mut on_response = on_response.clone();
                     let raw_request = raw_request.clone();
                     std::thread::spawn(move || {
-                        let tcp_stream = TcpStream::connect("127.0.0.1:8080");
+                        let addr = &format!("127.0.0.1:{}", port.to_string());
+                        let tcp_stream = TcpStream::connect(addr);
                         assert!(tcp_stream.is_ok());
                         if let Ok(mut tcp_stream) = tcp_stream {
                             let res = tcp_stream.set_write_timeout(Some(Duration::from_millis(100)));
@@ -267,9 +268,9 @@ pub fn test_request(raw_request: &str, on_request: impl FnMut(Request)  + Send +
 
                             stopper.stop();
                             for _ in 0..num_threads {
-                                let res = TcpStream::connect("127.0.0.1:8080");
-                                assert!(res.is_ok());
-                                sleep(Duration::from_millis(30));
+                                if let Ok(_) = TcpStream::connect(addr) {
+                                    sleep(Duration::from_millis(30));
+                                }
                             }
                         }
                     });
@@ -284,6 +285,7 @@ pub fn test_request(raw_request: &str, on_request: impl FnMut(Request)  + Send +
 #[test]
 fn hello_world() {
     test_request(
+        9090,
         "GET / HTTP/1.1\r\n\
                     Host: 127.0.0.1:8080\r\n\
                     User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0\r\n\
@@ -298,10 +300,16 @@ fn hello_world() {
                     Sec-Fetch-User: ?1\r\n\
                     Cache-Control: max-age=0\r\n\r\n",
         |request| {
+            assert_eq!(request.path(), "/");
+            assert_eq!(request.version(), &HttpVersion::Http1_1);
             request.response(200).close().text("Hello world!").send();
         },
         |response| {
-            assert_eq!(&response[..23], b"HTTP/1.1 200 OK\r\nDate: ");
+            assert_eq!(
+                &response[..23],
+                b"HTTP/1.1 200 OK\r\n\
+                Date: "
+            );
             assert_eq!(
                 &response[52..],
                 b"\r\n\
