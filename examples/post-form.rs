@@ -45,11 +45,11 @@ fn on_post_form(request: Request) {
     if request.has_post_form() {
         // Read content of the request.
         let mut content = vec![];
-        request.read_content(move |data, request| {
+        request.read_content(move |data, content_is_complite| {
             // Collect content chunks.
             content.extend_from_slice(data);
             // When all chunks received
-            if let Some(request) = request {
+            if let Some(request) = content_is_complite {
                 // Parse content data as query.
                 let form = parse_query(&content);
                 let response_body = format!("Form: {:?}", form);
