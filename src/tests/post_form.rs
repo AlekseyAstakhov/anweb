@@ -52,8 +52,8 @@ fn localhost() {
                 Date: "
             );
             assert_eq!(
-                &response[49..],
-                b"GMT\r\n\
+                &response[52..],
+                b"\r\n\
                 Connection: close\r\n\
                 Content-Length: 0\r\n\r\n"
             );
