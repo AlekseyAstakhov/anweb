@@ -1,22 +1,19 @@
-use crate::request::{Request, RequestError};
-
-/// Received HTTP request or some error.
-pub type HttpResult = Result<Request, HttpError>;
+use crate::request::RequestError;
 
 /// Http client errors.
 #[derive(Debug)]
 pub enum HttpError {
-    /// Stream read/write error.
-    StreamError(std::io::Error),
-    /// When parse HTTP
+    /// Read from sock error.
+    ReadError(std::io::Error),
+    /// Error of parsing data.
     ParseRequestError(RequestError),
-    /// When user wanna load content from http request but no content there.
-    TryLoadContentWhenNoContentLen,
+    /// Write to sock error.
+    WriteError(std::io::Error),
 }
 
 impl From<std::io::Error> for HttpError {
     fn from(err: std::io::Error) -> Self {
-        HttpError::StreamError(err)
+        HttpError::ReadError(err)
     }
 }
 

@@ -1,4 +1,4 @@
-use anweb::http_result::HttpError;
+use anweb::http_error::HttpError;
 use anweb::cookie::Cookie;
 use anweb::query::{parse_query, Query};
 use anweb::request::Request;

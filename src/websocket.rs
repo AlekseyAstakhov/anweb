@@ -71,8 +71,12 @@ pub type WebsocketResult<'a> = Result<&'a Frame, WebsocketError>;
 
 /// Error of websocket such as parsing frame or read from socket.
 pub enum WebsocketError {
+    /// Read from sock error.
+    ReadError(std::io::Error),
+    /// Error of parsing data.
     ParseFrameError(ParseFrameError),
-    StreamError(std::io::Error),
+    /// Write to sock error.
+    WriteError(std::io::Error),
 }
 
 /// Make vector containing frame based on the specified opcode and payload data.
@@ -366,7 +370,7 @@ impl Default for Parser {
 
 impl From<std::io::Error> for WebsocketError {
     fn from(err: std::io::Error) -> Self {
-        WebsocketError::StreamError(err)
+        WebsocketError::ReadError(err)
     }
 }
 

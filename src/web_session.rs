@@ -1,4 +1,4 @@
-use crate::http_result::HttpError;
+use crate::http_error::HttpError;
 use crate::request::{RequestError, ReceivedRequest, Request};
 use crate::request_parser::{ParseHttpRequestSettings, Parser};
 use crate::tcp_session::TcpSession;
@@ -56,9 +56,9 @@ impl WebSession {
                     self.tcp_session.close();
                 } else {
                     if self.tcp_session.is_http_mode() {
-                        self.tcp_session.call_http_callback(Err(HttpError::StreamError(err)));
+                        self.tcp_session.call_http_callback(Err(HttpError::ReadError(err)));
                     } else {
-                        self.tcp_session.call_websocket_callback(Err(WebsocketError::StreamError(err)));
+                        self.tcp_session.call_websocket_callback(Err(WebsocketError::ReadError(err)));
                     }
 
                     self.tcp_session.close();
@@ -126,19 +126,27 @@ impl WebSession {
 
         self.tcp_session.call_http_callback(Ok(Request { request_data: received_request, tcp_session: self.tcp_session.clone() }));
 
-        let content_callback = self.tcp_session.inner.content_callback.lock()
-            .unwrap_or_else(|err| { unreachable!(err) });
+        if let Ok(content_callback) = self.tcp_session.inner.content_callback.lock().as_deref_mut() {
+            let complete = false;
+            if let Some((content_callback, request)) = content_callback {
+                if let Some(content_len) = content_len {
+                    self.content_len = content_len;
+                    self.already_read_content_len = 0;
+                } else {
+                    let request = request.take();
+                    if content_callback(b"", request).is_err() {
+                        self.tcp_session.close();
+                        return;
+                    }
+                }
+            }
 
-        if content_callback.is_some() {
-            if let Some(content_len) = content_len {
-                self.content_len = content_len;
+            if complete {
+                *content_callback = None;
+                self.content_len = 0;
                 self.already_read_content_len = 0;
-            } else {
-                self.tcp_session.call_http_callback(Err(HttpError::TryLoadContentWhenNoContentLen));
             }
         }
-
-        drop(content_callback); // unlock
 
         if let Ok(websocket_callback) = self.tcp_session.inner.websocket_callback.lock() {
             if websocket_callback.is_some() {

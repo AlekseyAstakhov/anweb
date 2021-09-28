@@ -1,4 +1,4 @@
-use crate::http_result::{HttpResult, HttpError};
+use crate::http_error::HttpError;
 use crate::websocket::{Websocket, WebsocketResult, WebsocketError};
 use rustls::Session;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,12 +28,95 @@ impl TcpSession {
 
     /// Send arbitrary data to the client. Data may not be sent immediately, but in parts.
     pub fn send(&self, data: &[u8]) {
-        self.inner.send(data);
+        if let Ok(mut supluses) = self.inner.surpluses_to_write.lock() {
+            // already writing, add to the recording queue
+            if !supluses.is_empty() {
+                supluses.push(SurplusForWrite { data: Arc::new(data.to_vec()), write_yet_cnt: 0 });
+                return;
+            }
+        }
+
+        match self.inner.write(data) {
+            Ok(cnt) => {
+                if cnt < data.len() {
+                    self.send_later(SurplusForWrite { data: Arc::new(data[cnt..].to_vec()), write_yet_cnt: 0 });
+                } else {
+                    // all data is written
+                    if self.inner.need_close_after_sending.load(Ordering::SeqCst) {
+                        self.close();
+                    }
+                }
+            }
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::WouldBlock {
+                    self.send_later(SurplusForWrite { data: Arc::new(data.to_vec()), write_yet_cnt: 0 });
+                } else {
+                    if self.is_http_mode() {
+                        self.call_http_callback(Err(HttpError::WriteError(err)));
+                    } else {
+                        self.call_websocket_callback(Err(WebsocketError::WriteError(err)));
+                    }
+                    self.close();
+                }
+            }
+        }
     }
 
     /// Send arbitrary shared data to the client. Data may not be sent immediately, but in parts.
     pub fn send_arc(&self, data: &Arc<Vec<u8>>) {
-        self.inner.send_arc(data);
+        if let Ok(mut supluses) = self.inner.surpluses_to_write.lock() {
+            // already writing, add to the recording queue
+            if !supluses.is_empty() {
+                supluses.push(SurplusForWrite { data: data.clone(), write_yet_cnt: 0 });
+                return;
+            }
+        }
+
+        match self.inner.write(&data) {
+            Ok(cnt) => {
+                if cnt < data.len() {
+                    self.send_later(SurplusForWrite { data: Arc::clone(data), write_yet_cnt: cnt });
+                } else {
+                    // all data is written
+                    if self.is_http_mode() && self.inner.need_close_after_sending.load(Ordering::SeqCst) {
+                        self.close();
+                    }
+                }
+            }
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::WouldBlock {
+                    self.send_later(SurplusForWrite { data: Arc::clone(data), write_yet_cnt: 0 });
+                } else {
+                    if self.is_http_mode() {
+                        self.call_http_callback(Err(HttpError::WriteError(err)));
+                    } else {
+                        self.call_websocket_callback(Err(WebsocketError::WriteError(err)));
+                    }
+                    self.close();
+                }
+            }
+        }
+    }
+
+    /// If the data was not sent immediately, it switches to the sending mode in parts.
+    fn send_later(&self, surplus: SurplusForWrite) {
+        if let Ok(mut supluses) = self.inner.surpluses_to_write.lock() {
+            if let Ok(stream) = self.inner.mio_stream.lock() {
+                supluses.push(surplus);
+                match self.inner.mio_poll.reregister(&*stream, mio::Token(self.inner.slab_key), mio::Ready::writable(), mio::PollOpt::level()) {
+                    Ok(()) => {
+                        return;
+                    }
+                    Err(err) => {
+                        dbg!(err);
+                        self.close();
+                        return;
+                    }
+                }
+            }
+        }
+
+        self.close();
     }
 
     /// To close client socket after all data sent.
@@ -57,7 +140,7 @@ impl TcpSession {
     }
 
     /// Switch to HTTP mode. Set a callback function that is called when a new HTTP request is received or error receiving it.
-    pub fn to_http(&self, request_or_error_callback: impl FnMut(HttpResult) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
+    pub fn to_http(&self, request_or_error_callback: impl FnMut(Result<Request, HttpError>) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
         if let Ok(mut http_request_callback) = self.inner.http_request_callback.lock() {
             *http_request_callback = Some(Box::new(request_or_error_callback));
             self.inner.is_http_mode.store(true, Ordering::SeqCst);
@@ -75,10 +158,10 @@ impl TcpSession {
     }
 
     /// Helps call callback.
-    pub(crate) fn call_http_callback(&self, request: HttpResult) {
-        if let Ok(mut callback) = self.inner.http_request_callback.lock() {
+    pub(crate) fn call_websocket_callback(&self, frame: WebsocketResult) {
+        if let Ok(mut callback) = self.inner.websocket_callback.lock() {
             if let Some(callback) = &mut *callback {
-                if callback(request).is_err() {
+                if callback(frame, Websocket { tcp_session: self.clone() }).is_err() {
                     self.close();
                 }
             }
@@ -86,10 +169,10 @@ impl TcpSession {
     }
 
     /// Helps call callback.
-    pub(crate) fn call_websocket_callback(&self, frame: WebsocketResult) {
-        if let Ok(mut callback) = self.inner.websocket_callback.lock() {
+    pub(crate) fn call_http_callback(&self, request: Result<Request, HttpError>) {
+        if let Ok(mut callback) = self.inner.http_request_callback.lock() {
             if let Some(callback) = &mut *callback {
-                if callback(frame, Websocket { tcp_session: self.clone() }).is_err() {
+                if callback(request).is_err() {
                     self.close();
                 }
             }
@@ -132,9 +215,9 @@ impl TcpSession {
                         }
                         Err(err) => {
                             if self.is_http_mode() {
-                                self.call_http_callback(Err(HttpError::StreamError(err)));
+                                self.call_http_callback(Err(HttpError::WriteError(err)));
                             } else {
-                                self.call_websocket_callback(Err(WebsocketError::StreamError(err)));
+                                self.call_websocket_callback(Err(WebsocketError::WriteError(err)));
                             }
                         }
                     }
@@ -168,9 +251,9 @@ impl TcpSession {
                             self.close();
                         } else {
                             if self.is_http_mode() {
-                                self.call_http_callback(Err(HttpError::StreamError(err)));
+                                self.call_http_callback(Err(HttpError::WriteError(err)));
                             } else {
-                                self.call_websocket_callback(Err(WebsocketError::StreamError(err)));
+                                self.call_websocket_callback(Err(WebsocketError::WriteError(err)));
                             }
                             self.close();
                         }
@@ -184,9 +267,9 @@ impl TcpSession {
                 if let Ok(stream) = self.inner.mio_stream.lock() {
                     if let Err(err) = self.inner.mio_poll.reregister(&*stream, mio::Token(self.inner.slab_key), mio::Ready::readable(), mio::PollOpt::level()) {
                         if self.is_http_mode() {
-                            self.call_http_callback(Err(HttpError::StreamError(err)));
+                            self.call_http_callback(Err(HttpError::ReadError(err)));
                         } else {
-                            self.call_websocket_callback(Err(WebsocketError::StreamError(err)));
+                            self.call_websocket_callback(Err(WebsocketError::ReadError(err)));
                         }
                     }
                 }
@@ -237,12 +320,10 @@ pub(crate) struct InnerTcpSession {
 
     /// Callback function that is called when a data read from tcp socket.
     pub(crate) on_data_received_callback: Mutex<Option<Box<dyn FnMut(&[u8]) + Send>>>,
-
-    /// Callback function that is called when a new HTTP request is received or error receiving it.
-    pub(crate) http_request_callback: Mutex<Option<Box<dyn FnMut(HttpResult) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
     /// Sets true when callback is set.
     pub(crate) is_http_mode: Arc<AtomicBool>,
-
+    /// Callback function that is called when a new HTTP request is received or error receiving it.
+    pub(crate) http_request_callback: Mutex<Option<Box<dyn FnMut(Result<Request, HttpError>) -> Result<(), Box<dyn std::error::Error>> + Send>>>,
     /// Callback function that is called when content of HTTP request is fully received or error receiving it.
     pub(crate) content_callback: Mutex<Option<(Box<dyn FnMut(&[u8]/*data part*/, ContentIsComplite) -> Result<(), Box<dyn std::error::Error>> + Send>, Option<Request>)>>,
     /// Callback function that is called when a new websocket frame is received or error receiving it.
@@ -345,96 +426,6 @@ impl InnerTcpSession {
                 }
             }
         }
-    }
-
-    /// Send arbitrary data to the client. Data may not be sent immediately, but in parts.
-    pub fn send(&self, data: &[u8]) {
-        if let Ok(mut supluses) = self.surpluses_to_write.lock() {
-            // already writing, add to the recording queue
-            if !supluses.is_empty() {
-                supluses.push(SurplusForWrite { data: Arc::new(data.to_vec()), write_yet_cnt: 0 });
-                return;
-            }
-        }
-
-        match self.write(data) {
-            Ok(cnt) => {
-                if cnt < data.len() {
-                    self.send_later(SurplusForWrite { data: Arc::new(data[cnt..].to_vec()), write_yet_cnt: 0 });
-                } else {
-                    // all data is written
-                    if self.need_close_after_sending.load(Ordering::SeqCst) {
-                        self.close();
-                    }
-                }
-            }
-            Err(err) => {
-                if err.kind() == std::io::ErrorKind::WouldBlock {
-                    self.send_later(SurplusForWrite { data: Arc::new(data.to_vec()), write_yet_cnt: 0 });
-                } else if err.kind() == std::io::ErrorKind::ConnectionReset {
-                    self.close();
-                } else {
-                    self.close();
-                    dbg!(err);
-                }
-            }
-        }
-    }
-
-    /// Send arbitrary shared data to the client. Data may not be sent immediately, but in parts.
-    pub fn send_arc(&self, data: &Arc<Vec<u8>>) {
-        if let Ok(mut supluses) = self.surpluses_to_write.lock() {
-            // already writing, add to the recording queue
-            if !supluses.is_empty() {
-                supluses.push(SurplusForWrite { data: data.clone(), write_yet_cnt: 0 });
-                return;
-            }
-        }
-
-        match self.write(&data) {
-            Ok(cnt) => {
-                if cnt < data.len() {
-                    self.send_later(SurplusForWrite { data: Arc::clone(data), write_yet_cnt: cnt });
-                } else {
-                    // all data is written
-                    if self.is_http_mode() && self.need_close_after_sending.load(Ordering::SeqCst) {
-                        self.close();
-                    }
-                }
-            }
-            Err(err) => {
-                if err.kind() == std::io::ErrorKind::WouldBlock {
-                    self.send_later(SurplusForWrite { data: Arc::clone(data), write_yet_cnt: 0 });
-                } else if err.kind() == std::io::ErrorKind::ConnectionReset {
-                    self.close();
-                } else {
-                    self.close();
-                    dbg!(err);
-                }
-            }
-        }
-    }
-
-    /// If the data was not sent immediately, it switches to the sending mode in parts.
-    fn send_later(&self, surplus: SurplusForWrite) {
-        if let Ok(mut supluses) = self.surpluses_to_write.lock() {
-            if let Ok(stream) = self.mio_stream.lock() {
-                supluses.push(surplus);
-                match self.mio_poll.reregister(&*stream, mio::Token(self.slab_key), mio::Ready::writable(), mio::PollOpt::level()) {
-                    Ok(()) => {
-                        return;
-                    }
-                    Err(err) => {
-                        dbg!(err);
-                        self.close();
-                        return;
-                    }
-                }
-            }
-        }
-
-        dbg!("unreachable code");
-        self.close();
     }
 
     /// Close of client socket. After clossing will be generated `sever::Event::Disconnected`.
