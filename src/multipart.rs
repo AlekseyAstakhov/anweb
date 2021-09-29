@@ -14,10 +14,8 @@ impl MultipartParser {
             return Err(MultipartError::NoContentTypeHeader);
         }
 
-        let boundary_index = match content_type_val.find("boundary=") {
-            None => return Err(MultipartError::NoBoundaryInContentTypeHeader),
-            Some(index) => index,
-        };
+        let boundary_index = content_type_val.find("boundary=")
+            .ok_or(MultipartError::NoBoundaryInContentTypeHeader)?;
 
         let boundary = Vec::from(&content_type_val[boundary_index + 9..]);
         if boundary.is_empty() {
