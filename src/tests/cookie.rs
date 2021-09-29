@@ -84,7 +84,6 @@ fn local_host() {
             request.response(200).cookies(&cookies).close().send();
         },
         |response| {
-            dbg!(std::str::from_utf8(response));
             assert_eq!(
                 &response[..23],
                 b"HTTP/1.1 200 OK\r\n\
