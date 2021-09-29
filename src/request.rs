@@ -128,6 +128,7 @@ impl Request {
         if let Ok(http_date_string) = self.tcp_session.inner.http_date_string.read() {
             http_date_string.clone()
         } else {
+            // this code must be unreachable
             String::new()
         }
     }
@@ -143,6 +144,7 @@ pub struct Header {
 }
 
 impl std::fmt::Display for Header {
+    /// Header string ready for insert to http request/response, ends with "\r\n".
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.write_str(&self.name)?;
         fmt.write_str(": ")?;
@@ -236,7 +238,7 @@ impl RequestData {
     /// The method slice in request buffer converted to utf8 string. Empty if invalid utf8 string.
     pub fn method(&self) -> &str {
         if self.method_end_index > self.raw.len() {
-            // unreachable code;
+            // this code must be unreachable
             return "";
         }
 
@@ -313,7 +315,7 @@ impl RequestData {
     /// Method as raw bytes in request buffer.
     pub fn raw_method(&self) -> &[u8] {
         if self.method_end_index > self.raw.len() {
-            // unreachable code
+            // this code must be unreachable
             return b"";
         }
 
@@ -323,7 +325,7 @@ impl RequestData {
     /// Path as raw bytes in request buffer.
     pub fn raw_path(&self) -> &[u8] {
         if self.path_indices.0 > self.path_indices.1 || self.path_indices.1 > self.raw.len() {
-            // unreachable code
+            // this code must be unreachable
             return b"";
         }
 
@@ -333,7 +335,7 @@ impl RequestData {
     /// Query slice in request buffer. Empty if no query.
     pub fn raw_query(&self) -> &[u8] {
         if self.raw_query_indices.0 > self.raw_query_indices.1 || self.raw_query_indices.1 > self.raw.len() {
-            // unreachable code;
+            // this code must be unreachable
             return b"";
         }
 
