@@ -1,9 +1,9 @@
-use crate::request::{ReceivedRequest, HttpVersion, ConnectionType};
+use crate::request::{RequestData, HttpVersion, ConnectionType};
 use crate::response::{HTTP_CODES_WITH_NAME_BY_CODE, http_status_code_with_name, need_close_by_request};
 
 #[test]
 fn close_by_request() {
-    let mut request = ReceivedRequest::new();
+    let mut request = RequestData::new();
     request.version = HttpVersion::Http1_0;
     request.connection_type = Some(ConnectionType::Close);
     assert_eq!(need_close_by_request(&request), true);

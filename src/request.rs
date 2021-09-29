@@ -8,7 +8,7 @@ use crate::response::Response;
 
 /// HTTP request like "GET /?abc=123 HTTP/1.1\r\nConnection: keep-alive\r\n\r\n".
 pub struct Request {
-    pub(crate) request_data: ReceivedRequest,
+    pub(crate) request_data: RequestData,
     pub(crate) tcp_session: TcpSession,
 }
 
@@ -63,7 +63,7 @@ impl Request {
     }
 
     /// Return reference to request data structure.
-    pub fn parsed_reauest(&self) -> &ReceivedRequest {
+    pub fn parsed_reauest(&self) -> &RequestData {
         &self.request_data
     }
 
@@ -191,7 +191,7 @@ pub enum RequestError {
 
 /// Request data after parse.
 #[derive(Clone)]
-pub struct ReceivedRequest {
+pub struct RequestData {
     /// Raw buffer of request without content.
     pub(crate) raw: Vec<u8>,
     /// Indices of method in raw buffer ('raw').
@@ -215,10 +215,10 @@ pub struct ReceivedRequest {
     pub(crate) decoded_path: String,
 }
 
-impl ReceivedRequest {
+impl RequestData {
     /// Creates a request with undefined fields.
     pub fn new() -> Self {
-        ReceivedRequest {
+        RequestData {
             method_end_index: 0,
             path_indices: (0, 0),
             raw_query_indices: (0, 0),
@@ -232,7 +232,7 @@ impl ReceivedRequest {
     }
 }
 
-impl ReceivedRequest {
+impl RequestData {
     /// The method slice in request buffer converted to utf8 string. Empty if invalid utf8 string.
     pub fn method(&self) -> &str {
         if self.method_end_index > self.raw.len() {

@@ -1,4 +1,4 @@
-use crate::request::{ConnectionType, HttpVersion, Request, ReceivedRequest};
+use crate::request::{ConnectionType, HttpVersion, Request, RequestData};
 
 /// For build and send HTTP response.
 pub struct Response<'a, 'b, 'c, 'd, 'e> {
@@ -151,7 +151,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
         }
     }
 
-    fn connection_str<'r>(&self, request: &'r ReceivedRequest) -> &'static str {
+    fn connection_str<'r>(&self, request: &'r RequestData) -> &'static str {
         if let Some(keep_alive_connection) = self.keep_alive_connection {
             if keep_alive_connection {
                 "Connection: keep_alive\r\n"
@@ -164,7 +164,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
     }
 }
 
-pub fn connection_str_by_request(request: &ReceivedRequest) -> &'static str {
+pub fn connection_str_by_request(request: &RequestData) -> &'static str {
     if let Some(connection_type) = &request.connection_type() {
         match connection_type {
             ConnectionType::KeepAlive => "Connection: keep_alive\r\n",
@@ -423,7 +423,7 @@ pub static HTTP_CODES_WITH_NAME_BY_CODE: &[(u16, &str)] = &[
 ];
 
 /// Determines whether to close the connection after responding by the content of the request.
-pub fn need_close_by_request(request: &ReceivedRequest) -> bool {
+pub fn need_close_by_request(request: &RequestData) -> bool {
     if let Some(connection_type) = &request.connection_type() {
         if let ConnectionType::Close = connection_type {
             return true;

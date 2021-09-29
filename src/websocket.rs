@@ -1,4 +1,4 @@
-use crate::request::ReceivedRequest;
+use crate::request::RequestData;
 use sha1::{Digest, Sha1};
 use crate::tcp_session::TcpSession;
 
@@ -8,7 +8,7 @@ pub const BINARY_OPCODE: u8 = 0x2;
 pub const CLOSE_OPCODE: u8 = 0x8;
 
 /// Generate response to upgrade connection request. Check only Sec-WebSocket-Key header of request!
-pub fn handshake_response(request: &ReceivedRequest) -> Result<Vec<u8>, HandshakeError> {
+pub fn handshake_response(request: &RequestData) -> Result<Vec<u8>, HandshakeError> {
     const MAGIC_STRING_FOR_HANDSHAKE: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
     let key = request.header_value("Sec-WebSocket-Key")

@@ -1,5 +1,5 @@
 use crate::http_error::HttpError;
-use crate::request::{RequestError, ReceivedRequest, Request};
+use crate::request::{RequestError, RequestData, Request};
 use crate::request_parser::{ParseHttpRequestSettings, Parser};
 use crate::tcp_session::TcpSession;
 use crate::websocket;
@@ -114,7 +114,7 @@ impl WebSession {
         }
     }
 
-    fn process_received_request(&mut self, received_request: ReceivedRequest, surplus: Vec<u8>, settings: &Settings) {
+    fn process_received_request(&mut self, received_request: RequestData, surplus: Vec<u8>, settings: &Settings) {
         if let State::Http(http) = &mut self.state {
             let content_len = received_request.content_len();
 
