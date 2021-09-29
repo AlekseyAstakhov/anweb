@@ -137,20 +137,23 @@ impl Server {
     }
 }
 
+/// For stop the server.
 #[derive(Clone)]
 pub struct Stopper {
     need_stop: Arc<AtomicBool>,
 }
 
 impl Stopper {
+    /// Stop the server. Server will stopped in new poll iteration.
     pub fn stop(&self) {
         self.need_stop.store(true, Ordering::SeqCst);
     }
 
-    pub fn need_stop(&self) -> bool {
+    /// Returns true if it is necessary to stop the server.
+    pub(crate) fn need_stop(&self) -> bool {
         self.need_stop.load(Ordering::SeqCst)
     }
-
+    /// Create new stopper.
     pub(crate) fn new() -> Self {
         Self { need_stop: Arc::new(AtomicBool::new(false)) }
     }

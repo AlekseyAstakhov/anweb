@@ -23,7 +23,7 @@ pub struct Worker {
     pub settings: Settings,
 
     /// For stop the server.
-    pub stopper: Stopper,
+    stopper: Stopper,
 
     mio_poll: Arc<mio::Poll>,
     events: mio::Events,

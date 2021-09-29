@@ -257,13 +257,9 @@ impl RequestData {
 
     /// Header value by name.
     pub fn header_value(&self, name: &str) -> Option<&str> {
-        for header in self.headers.iter() {
-            if header.name == name {
-                return Some(&header.value);
-            }
-        }
-
-        None
+        self.headers.iter()
+            .find(|header| header.name == name)
+            .map(|header| &header.value[..])
     }
 
     /// Version "HTTP/1.0" or "HTTP/1.1".

@@ -200,7 +200,7 @@ impl WebSession {
 
     fn  on_websocket_read(&mut self, data: &[u8], settings: &Settings) {
         if let State::Websocket(websocket_parser) = &mut self.state {
-            match websocket_parser.parse_yet(data, settings.websocket_payload_limit) {
+            match websocket_parser.push(data, settings.websocket_payload_limit) {
                 Ok(result) => {
                     if let Some((frame, surplus)) = result {
                         let frame_is_close = frame.is_close();

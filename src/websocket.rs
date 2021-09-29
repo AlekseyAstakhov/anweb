@@ -119,7 +119,7 @@ impl Parser {
     }
 
     /// Add incoming data for processing.
-    pub fn parse_yet(&mut self, tmp_buf: &[u8], payload_limit: usize) -> Result<Option<(Frame, Vec<u8>)>, ParseFrameError> {
+    pub fn push(&mut self, tmp_buf: &[u8], payload_limit: usize) -> Result<Option<(Frame, Vec<u8>)>, ParseFrameError> {
         self.frame.buf.extend_from_slice(tmp_buf);
         loop {
             match self.state {
