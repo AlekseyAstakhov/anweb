@@ -96,7 +96,7 @@ impl WebSession {
                 return;
             }
 
-            match http.request_parser.parse_yet(data, &settings.parse_http_request_settings) {
+            match http.request_parser.push(data, &settings.parse_http_request_settings) {
                 Ok((received_request, surplus)) => {
                     self.process_received_request(received_request, surplus, settings);
                 }

@@ -28,7 +28,7 @@ fn parse() {
 
     let mut parser = Parser::new();
     let request_str = "GET / HTTP/1.1\r\nConnection: keep-alive\r\n\r\n";
-    if let Ok((_request, surplus)) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Ok((_request, surplus)) = parser.push(request_str.as_bytes(), &parse_settings) {
         assert!(surplus.is_empty());
     } else {
         assert!(false);
@@ -37,7 +37,7 @@ fn parse() {
     let mut parser = Parser::new();
 
     let request_str = "GET / HTTP/1.1\r\nConnection: keep-alive\r\n\r\naaa";
-    if let Ok((_request, surplus)) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Ok((_request, surplus)) = parser.push(request_str.as_bytes(), &parse_settings) {
         assert_eq!(surplus.len(), 3);
     } else {
         assert!(false);
@@ -46,7 +46,7 @@ fn parse() {
     let mut parser = Parser::new();
 
     let request_str = "GET /index HTTP/1.1\r\n\r\n";
-    if let Ok((request, _)) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Ok((request, _)) = parser.push(request_str.as_bytes(), &parse_settings) {
         assert_eq!(request.method(), "GET");
         assert_eq!(request.path(), "/index");
         assert_eq!(request.raw_query(), b"");
@@ -59,7 +59,7 @@ fn parse() {
     let mut parser = Parser::new();
 
     let request_str = "POST /index?a=1&b=2;c=3 HTTP/1.0\r\nConnection: keep-alive\r\n\r\n";
-    if let Ok((request, _)) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Ok((request, _)) = parser.push(request_str.as_bytes(), &parse_settings) {
         assert_eq!(request.method(), "POST");
         assert_eq!(request.path(), "/index");
         assert_eq!(request.raw_query(), b"a=1&b=2;c=3");
@@ -72,7 +72,7 @@ fn parse() {
     let mut parser = Parser::new();
 
     let request_str = "POST / HTTP/1.0\r\nConnection: keep-alive\r\nTest: some\r\n\r\n";
-    if let Ok((request, _)) = parser.parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Ok((request, _)) = parser.push(request_str.as_bytes(), &parse_settings) {
         assert_eq!(
             request.headers,
             vec![
@@ -90,25 +90,25 @@ fn parse() {
     let mut parser = Parser::new();
 
     let request_str = "";
-    if parser.parse_yet(request_str.as_bytes(), &parse_settings).is_ok() {
+    if parser.push(request_str.as_bytes(), &parse_settings).is_ok() {
         assert!(false);
     }
 
     let mut parser = Parser::new();
 
     let request_str = "/index?a=1&b=2;c=3 HTTP/1.0\r\nConnection: keep-alive\r\n\r\n";
-    if parser.parse_yet(request_str.as_bytes(), &parse_settings).is_ok() {
+    if parser.push(request_str.as_bytes(), &parse_settings).is_ok() {
         assert!(false);
     }
 
     let request_str = "GET /ws /index?a=1&b=2;c=3 HTTP/1.0\r\nConnection: keep-alive\r\n\r\n";
-    if Parser::new().parse_yet(request_str.as_bytes(), &parse_settings).is_ok() {
+    if Parser::new().push(request_str.as_bytes(), &parse_settings).is_ok() {
         assert!(false);
     }
 
     // usupported protocol
     let request_str = "GET / HTTP/1.5\r\n\r\n";
-    match Parser::new().parse_yet(request_str.as_bytes(), &parse_settings) {
+    match Parser::new().push(request_str.as_bytes(), &parse_settings) {
         Ok(_) => {
             assert!(false);
         }
@@ -121,25 +121,25 @@ fn parse() {
     }
 
     let request_str = "GET / HTTP/1.1 \r\nConnection: keep-alive\r\n";
-    if Parser::new().parse_yet(request_str.as_bytes(), &parse_settings).is_ok() {
+    if Parser::new().push(request_str.as_bytes(), &parse_settings).is_ok() {
         assert!(false);
     }
 
     let request_str = "GET / HTTP/1.1\r\n: sd\r\n\r\n";
-    if Parser::new().parse_yet(request_str.as_bytes(), &parse_settings).is_ok() {
+    if Parser::new().push(request_str.as_bytes(), &parse_settings).is_ok() {
         assert!(false);
     }
 
     let request_str = "GET / HTTP/1.1\r\n : sd\r\n\r\n";
-    assert!(Parser::new().parse_yet(request_str.as_bytes(), &parse_settings).is_ok());
+    assert!(Parser::new().push(request_str.as_bytes(), &parse_settings).is_ok());
 
     let request_str = "GET / HTTP/1.1\r\nSD:\r\n\r\n";
-    if Parser::new().parse_yet(request_str.as_bytes(), &parse_settings).is_ok() {
+    if Parser::new().push(request_str.as_bytes(), &parse_settings).is_ok() {
         assert!(false);
     }
 
     let request_str = "GET / HTTP/1.1\r\nSD: \r\n\r\n";
-    if Parser::new().parse_yet(request_str.as_bytes(), &parse_settings).is_ok() {
+    if Parser::new().push(request_str.as_bytes(), &parse_settings).is_ok() {
         assert!(false);
     }
 }
@@ -158,43 +158,43 @@ fn limits() {
 
     // norm
     let request_str = "GET / HTTP/1.1\r\n1234: abc\r\n\r\n";
-    if let Err(_) = Parser::new().parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Err(_) = Parser::new().push(request_str.as_bytes(), &parse_settings) {
         assert!(false);
     }
 
     let request_str = "GET / HTTP/1.1\r\n12345: abc\r\n\r\n";
-    if let Err(_) = Parser::new().parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Err(_) = Parser::new().push(request_str.as_bytes(), &parse_settings) {
         assert!(false);
     }
 
     let request_str = "GET / HTTP/1.1\r\n123456: abc\r\n\r\n";
-    if let Ok(_) = Parser::new().parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Ok(_) = Parser::new().push(request_str.as_bytes(), &parse_settings) {
         assert!(false);
     }
 
     // headers count limit--------------------------------------------
     // less
     let request_str = "GET / HTTP/1.1\r\nabcd: as\r\n\r\n";
-    if let Err(_) = Parser::new().parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Err(_) = Parser::new().push(request_str.as_bytes(), &parse_settings) {
         assert!(false);
     }
 
     // equal
     let request_str = "GET / HTTP/1.1\r\nabcd: as\r\nAAA: 12\r\n\r\n";
-    if let Err(_) = Parser::new().parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Err(_) = Parser::new().push(request_str.as_bytes(), &parse_settings) {
         assert!(false);
     }
 
     // more
     let request_str = "GET / HTTP/1.1\r\nabcd: as\r\nAAA: 12\r\nVBWER: ASD2\r\n\r\n";
-    if let Ok(_) = Parser::new().parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Ok(_) = Parser::new().push(request_str.as_bytes(), &parse_settings) {
         assert!(false);
     }
 
     // header value limit--------------------------------------------
     // less
     let request_str = "GET / HTTP/1.1\r\nabcd: as\r\n\r\n";
-    if let Err(err) = Parser::new().parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Err(err) = Parser::new().push(request_str.as_bytes(), &parse_settings) {
         if let RequestError::HeaderValueLenLimit = err {
             assert!(false);
         }
@@ -202,19 +202,19 @@ fn limits() {
 
     // equal
     let request_str = "GET / HTTP/1.1\r\nxyz: bcafghs\r\n\r\n";
-    if let Err(_) = Parser::new().parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Err(_) = Parser::new().push(request_str.as_bytes(), &parse_settings) {
         assert!(false);
     }
 
     // more
     let request_str = "GET / HTTP/1.1\r\nxyz: bcaajsxs\r\n\r\n";
-    if let Ok(_) = Parser::new().parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Ok(_) = Parser::new().push(request_str.as_bytes(), &parse_settings) {
         assert!(false);
     }
 
     // empty header---------------------------------------------------
     let request_str = "GET / HTTP/1.1\r\n: abcasdf\r\n\r\n";
-    if let Err(err) = Parser::new().parse_yet(request_str.as_bytes(), &parse_settings) {
+    if let Err(err) = Parser::new().push(request_str.as_bytes(), &parse_settings) {
         if let RequestError::EmptyHeaderName = err {
         } else {
             assert!(false);

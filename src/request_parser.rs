@@ -53,8 +53,8 @@ impl Parser {
         }
     }
 
-    /// Parse. At the moment, in case of an error, the parser becomes invalid and needs to be recreated.
-    pub fn parse_yet(&mut self, buf: &[u8], parse_settings: &ParseHttpRequestSettings) -> Result<(ReceivedRequest, Vec<u8>), RequestError> {
+    /// Push data for parsing. At the moment, in case of an error, the parser becomes invalid and needs to be recreated.
+    pub fn push(&mut self, buf: &[u8], parse_settings: &ParseHttpRequestSettings) -> Result<(ReceivedRequest, Vec<u8>), RequestError> {
         let prev_idx = self.request.raw.len();
         self.request.raw.extend_from_slice(buf);
 
