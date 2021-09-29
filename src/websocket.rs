@@ -230,7 +230,7 @@ impl Parser {
                         // from a client if that client sends an unmasked message
                         let mut mask = [0; 4];
                         mask.clone_from_slice(result.mask().unwrap_or_else(|| {
-                            dbg!("unreachable code");
+                            // unreachable code
                             &[0, 0, 0, 0]
                         }));
 

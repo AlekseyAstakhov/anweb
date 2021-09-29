@@ -236,7 +236,7 @@ impl RequestData {
     /// The method slice in request buffer converted to utf8 string. Empty if invalid utf8 string.
     pub fn method(&self) -> &str {
         if self.method_end_index > self.raw.len() {
-            dbg!("unreachable code");
+            // unreachable code;
             return "";
         }
 
@@ -313,7 +313,7 @@ impl RequestData {
     /// Method as raw bytes in request buffer.
     pub fn raw_method(&self) -> &[u8] {
         if self.method_end_index > self.raw.len() {
-            dbg!("unreachable code");
+            // unreachable code
             return b"";
         }
 
@@ -323,7 +323,7 @@ impl RequestData {
     /// Path as raw bytes in request buffer.
     pub fn raw_path(&self) -> &[u8] {
         if self.path_indices.0 > self.path_indices.1 || self.path_indices.1 > self.raw.len() {
-            dbg!("unreachable code");
+            // unreachable code
             return b"";
         }
 
@@ -333,7 +333,7 @@ impl RequestData {
     /// Query slice in request buffer. Empty if no query.
     pub fn raw_query(&self) -> &[u8] {
         if self.raw_query_indices.0 > self.raw_query_indices.1 || self.raw_query_indices.1 > self.raw.len() {
-            dbg!("unreachable code");
+            // unreachable code;
             return b"";
         }
 
