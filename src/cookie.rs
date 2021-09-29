@@ -36,7 +36,7 @@ impl<'a> Cookie<'a> {
         }
     }
 
-    /// Return string with value for "Set-Cookie" header.
+    /// Return string with value prepared for "Set-Cookie" header.
     pub fn header_value(&self) -> String {
         format!("{}={}{}{}{}{}{}{}",
                 self.name,
