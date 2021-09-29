@@ -254,13 +254,13 @@ pub fn test_request(port: u16, raw_request: &str, on_request: impl FnMut(Request
                         let tcp_stream = TcpStream::connect(addr);
                         assert!(tcp_stream.is_ok());
                         if let Ok(mut tcp_stream) = tcp_stream {
-                            let res = tcp_stream.set_write_timeout(Some(Duration::from_millis(100)));
+                            let res = tcp_stream.set_write_timeout(Some(Duration::from_millis(8)));
                             assert!(res.is_ok());
                             let res = tcp_stream.write(raw_request.as_bytes());
                             assert!(res.is_ok());
 
                             let mut response: Vec<u8> = Vec::new();
-                            let res = tcp_stream.set_read_timeout(Some(Duration::from_millis(300)));
+                            let res = tcp_stream.set_read_timeout(Some(Duration::from_millis(64)));
                             assert!(res.is_ok());
                             let res = tcp_stream.read_to_end(&mut response);
                             assert!(res.is_ok());
@@ -269,7 +269,7 @@ pub fn test_request(port: u16, raw_request: &str, on_request: impl FnMut(Request
                             stopper.stop();
                             for _ in 0..num_threads {
                                 if let Ok(_) = TcpStream::connect(addr) {
-                                    sleep(Duration::from_millis(30));
+                                    sleep(Duration::from_millis(1));
                                 }
                             }
                         }
