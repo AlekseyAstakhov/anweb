@@ -14,7 +14,7 @@ use crate::web_session::WebSession;
 /// Single threaded TCP server designed for use as an HTTP server.
 pub struct Worker {
     /// Connected clients.
-    pub web_sessions: Slab<WebSession>,
+    web_sessions: Slab<WebSession>,
 
     /// Connection counter. Used to create tcp connections identifiers. Atomic in order to identify users on several such servers.
     pub connections_counter: Arc<AtomicU64>,

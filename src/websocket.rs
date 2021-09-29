@@ -11,38 +11,39 @@ pub const CLOSE_OPCODE: u8 = 0x8;
 pub fn handshake_response(request: &ReceivedRequest) -> Result<Vec<u8>, HandshakeError> {
     const MAGIC_STRING_FOR_HANDSHAKE: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-    if let Some(key) = request.header_value("Sec-WebSocket-Key") {
-        let mut hasher = Sha1::new();
-        hasher.input((key.to_owned() + MAGIC_STRING_FOR_HANDSHAKE).as_bytes());
-        let accept_sha1 = hasher.result();
-        let accept = base64::encode(&accept_sha1);
+    let key = request.header_value("Sec-WebSocket-Key")
+        .ok_or(HandshakeError::NoSecWebSocketKeyHeader)?;
 
-        let protocol = if let Some(protocol) = request.header_value("Sec-WebSocket-Protocol") {
-            format!("Sec-WebSocket-Protocol: {}\r\n", &protocol)
-        } else {
-            String::new()
-        };
+    let mut hasher = Sha1::new();
+    hasher.input((key.to_owned() + MAGIC_STRING_FOR_HANDSHAKE).as_bytes());
+    let accept_sha1 = hasher.result();
+    let accept = base64::encode(&accept_sha1);
 
-        let response = format!(
-            "{} 101 Switching Protocols\r\n\
-             Upgrade: websocket\r\n\
-             Connection: Upgrade\r\n\
-             Sec-WebSocket-Accept: {}\r\n\
-             {}\
-             \r\n",
-            request.version().to_string_for_response(),
-            &accept,
-            &protocol
-        );
+    let protocol = if let Some(protocol) = request.header_value("Sec-WebSocket-Protocol") {
+        format!("Sec-WebSocket-Protocol: {}\r\n", &protocol)
+    } else {
+        String::new()
+    };
 
-        return Ok(Vec::from(response));
-    }
+    let response = format!(
+        "{} 101 Switching Protocols\r\n\
+         Upgrade: websocket\r\n\
+         Connection: Upgrade\r\n\
+         Sec-WebSocket-Accept: {}\r\n\
+         {}\
+         \r\n",
+        request.version().to_string_for_response(),
+        &accept,
+        &protocol
+    );
 
-    Err(HandshakeError {})
+    return Ok(Vec::from(response));
 }
 
 #[derive(Debug)]
-pub struct HandshakeError {}
+pub enum HandshakeError {
+    NoSecWebSocketKeyHeader
+}
 
 #[derive(Clone)]
 pub struct Websocket {

@@ -207,7 +207,7 @@ impl TcpSession {
         if let Ok(mut surpluses_for_write) = self.inner.surpluses_to_write.lock() {
             // ???
             if surpluses_for_write.is_empty() {
-                dbg!("unreachable code");
+                // unreachable code
                 if let Ok(stream) = self.inner.mio_stream.lock() {
                     match self.inner.mio_poll.reregister(&*stream, mio::Token(self.inner.slab_key), mio::Ready::readable(), mio::PollOpt::level()) {
                         Ok(()) => {
@@ -230,8 +230,7 @@ impl TcpSession {
             for surplus in surpluses_for_write.iter_mut() {
                 // ???
                 if surplus.write_yet_cnt >= surplus.data.len() {
-                    dbg!("unreachable code");
-                    // remove latter from vec below
+                    // unreachable code, data will removed latter from vec below
                     continue;
                 }
 
@@ -244,12 +243,7 @@ impl TcpSession {
                         }
                     }
                     Err(err) => {
-                        if err.kind() == std::io::ErrorKind::WouldBlock {
-                            // will write latter when writeable
-                            break;
-                        } else if err.kind() == std::io::ErrorKind::ConnectionReset {
-                            self.close();
-                        } else {
+                        if err.kind() != std::io::ErrorKind::WouldBlock {
                             if self.is_http_mode() {
                                 self.call_http_callback(Err(HttpError::WriteError(err)));
                             } else {
@@ -257,6 +251,9 @@ impl TcpSession {
                             }
                             self.close();
                         }
+
+                        // if WouldBlock data will write latter when writeable
+                        break;
                     }
                 }
             }
@@ -279,9 +276,6 @@ impl TcpSession {
                     self.close();
                 }
             }
-        } else {
-            dbg!("unreachable code");
-            self.close();
         }
     }
 }

@@ -2,11 +2,9 @@ use crate::cookie::{parse_cookie, CookieOfRequst};
 use crate::query::{parse_query, Query};
 use std::str::from_utf8;
 use crate::tcp_session::{ContentIsComplite, TcpSession};
-use crate::websocket::{Websocket, WebsocketResult, WebsocketError};
+use crate::websocket::{Websocket, WebsocketResult, WebsocketError, HandshakeError};
 use crate::websocket;
-use std::io::ErrorKind;
 use crate::response::Response;
-use std::io;
 
 /// HTTP request like "GET /?abc=123 HTTP/1.1\r\nConnection: keep-alive\r\n\r\n".
 pub struct Request {
@@ -83,20 +81,15 @@ impl Request {
         drop(tcp_session);
     }
 
-    /// Begin work with websocket. Contains vector with response to handshake and custom data, if the vector is empty then server will make handshake itself.
-    pub fn accept_websocket(&mut self, payload: Vec<u8>, callback: impl FnMut(WebsocketResult, Websocket) -> Result<(), WebsocketError> + Send + 'static) -> Result<Websocket, io::Error> {
-        if payload.is_empty() {
-            match websocket::handshake_response(&self.request_data) {
-                Ok(response) => {
-                    self.tcp_session.send(&response);
-                }
-                Err(_) => {
-                    return Err(io::Error::new(ErrorKind::Other, "Websocket handshake error"));
-                }
-            }
-        } else {
-            self.tcp_session.send(&payload);
-        }
+    /// Begin work with websocket.
+    /// # Arguments
+    /// * `payload` - extra raw data that will send together with handshake response. Must be prepared as frame(frames).
+    /// * `callback` - Will called every time a datagram is received or some error such as read/write sock errors or parsing frames.
+    pub fn accept_websocket(&mut self, payload: Vec<u8>, callback: impl FnMut(WebsocketResult, Websocket) -> Result<(), WebsocketError> + Send + 'static) -> Result<Websocket, HandshakeError>
+    {
+        let mut response =  websocket::handshake_response(&self.request_data)?;
+        response.extend_from_slice(&payload);
+        self.tcp_session.send(&response);
 
         if let Ok(mut websocket_callback) = self.tcp_session.inner.websocket_callback.lock() {
             *websocket_callback = Some(Box::new(callback));

@@ -2,7 +2,7 @@ use anweb::redirect_server::run_redirect_server;
 use anweb::server;
 use anweb::server::Server;
 use anweb::tls::{load_certs, load_private_key};
-use anweb::websocket::{frame, handshake_response, Frame, TEXT_OPCODE, Websocket};
+use anweb::websocket::{frame, Frame, TEXT_OPCODE, Websocket};
 use rustls::{NoClientAuth, ServerConfig};
 use std::collections::btree_map::BTreeMap;
 use std::str::from_utf8;
@@ -45,21 +45,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             request.response(200).html(INDEX_HTML).send();
                         }
                         "/ws" => {
-                            let mut handshake_response = handshake_response(&request.parsed_reauest())?;
-                            // give current chat
-                            let messages = chat.messages.lock().unwrap();
-                            for msg in messages.iter() {
-                                handshake_response.extend(frame(TEXT_OPCODE, msg.as_bytes()));
+                            if let Ok(messages) = chat.messages.lock() {
+                                // give full current chat
+                                let mut full_chat_frames = vec![];
+                                for msg in messages.iter() {
+                                    full_chat_frames.extend(frame(TEXT_OPCODE, msg.as_bytes()));
+                                }
+
+                                let cloned_chat = chat.clone();
+                                let websocket = request.accept_websocket(full_chat_frames, move |received_frame, _| {
+                                    on_websocket_frame(received_frame?, &cloned_chat);
+                                    Ok(())
+                                })?;
+
+                                let mut users = chat.users.write().unwrap();
+                                users.insert(websocket.tcp_session().id(), websocket.clone());
                             }
-
-                            let cloned_chat = chat.clone();
-                            let websocket = request.accept_websocket(handshake_response, move |received_frame, _| {
-                                on_websocket_frame(received_frame?, &cloned_chat);
-                                Ok(())
-                            })?;
-
-                            let mut users = chat.users.write().unwrap();
-                            users.insert(websocket.tcp_session().id(), websocket.clone());
                         }
                         _ => {
                             request.response(404).text("404 page not found").send();
