@@ -5,7 +5,7 @@ use crate::websocket::{Parser, frame, TEXT_OPCODE, BINARY_OPCODE};
 fn parse_one_good_frame() {
     let incoming_data = [129, 140, 211, 25, 248, 86, 155, 124, 148, 58, 188, 57, 143, 57, 161, 117, 156, 119];
     let mut parser = Parser::new();
-    if let Ok(result) = parser.push(&incoming_data, 12) {
+    if let Ok(result) = parser.parse_yet(&incoming_data, 12) {
         if let Some((frame, surplus)) = result {
             assert_eq!(frame.fin(), true);
             assert_eq!(frame.opcode(), 1);
@@ -28,7 +28,7 @@ fn parse_one_good_frame() {
 fn parse_two_good_frame_and_surplus() {
     let incoming_data = [129, 131, 216, 213, 165, 109, 233, 231, 150];
     let mut parser = Parser::new();
-    if let Ok(result) = parser.push(&incoming_data, 100) {
+    if let Ok(result) = parser.parse_yet(&incoming_data, 100) {
         if let Some((frame, surplus)) = result {
             assert_eq!(frame.fin(), true);
             assert_eq!(frame.opcode(), 1);
@@ -39,7 +39,7 @@ fn parse_two_good_frame_and_surplus() {
             assert!(surplus.is_empty());
 
             let incoming_data = [129, 134, 6, 145, 169, 18, 103, 243, 202, 118, 99, 247, 129, 137];
-            if let Ok(result) = parser.push(&incoming_data, 100) {
+            if let Ok(result) = parser.parse_yet(&incoming_data, 100) {
                 if let Some((frame, surplus)) = result {
                     assert_eq!(frame.fin(), true);
                     assert_eq!(frame.opcode(), 1);
@@ -68,7 +68,7 @@ fn parse_two_good_frame_and_surplus() {
 fn parse_two_good_frame_together_and_surplus() {
     let incoming_data = [129, 131, 216, 213, 165, 109, 233, 231, 150, 129, 134, 6, 145, 169, 18, 103, 243, 202, 118, 99, 247, 129, 133];
     let mut parser = Parser::new();
-    if let Ok(result) = parser.push(&incoming_data, 100) {
+    if let Ok(result) = parser.parse_yet(&incoming_data, 100) {
         if let Some((frame, surplus)) = result {
             assert_eq!(frame.fin(), true);
             assert_eq!(frame.opcode(), 1);
@@ -78,7 +78,7 @@ fn parse_two_good_frame_together_and_surplus() {
             assert_eq!(frame.payload(), b"123");
             assert!(!surplus.is_empty());
 
-            if let Ok(result) = parser.push(&surplus, 100) {
+            if let Ok(result) = parser.parse_yet(&surplus, 100) {
                 if let Some((frame, surplus)) = result {
                     assert_eq!(frame.fin(), true);
                     assert_eq!(frame.opcode(), 1);
@@ -107,7 +107,7 @@ fn parse_two_good_frame_together_and_surplus() {
 fn parse_empty() {
     let incoming_data = [];
     let mut parser = Parser::new();
-    if let Ok(result) = parser.push(&incoming_data, 100) {
+    if let Ok(result) = parser.parse_yet(&incoming_data, 100) {
         assert!(result.is_none());
     } else {
         assert!(false);
@@ -118,7 +118,7 @@ fn parse_empty() {
 fn parse_part_of_frame() {
     let incoming_data = [129, 140, 211, 25, 248, 86];
     let mut parser = Parser::new();
-    if let Ok(result) = parser.push(&incoming_data, 100) {
+    if let Ok(result) = parser.parse_yet(&incoming_data, 100) {
         assert!(result.is_none());
     } else {
         assert!(false);
@@ -129,7 +129,7 @@ fn parse_part_of_frame() {
 fn parse_close_frame() {
     let incoming_data = [136, 130, 149, 71, 232, 208, 3, 233];
     let mut parser = Parser::new();
-    if let Ok(result) = parser.push(&incoming_data, 100) {
+    if let Ok(result) = parser.parse_yet(&incoming_data, 100) {
         if let Some((frame, surplus)) = result {
             assert_eq!(frame.fin(), true);
             assert_eq!(frame.opcode(), 8);
@@ -158,7 +158,7 @@ fn make_no_masked_frame_for_send() {
 fn payload_len_limit() {
     let incoming_data = [129, 140, 211, 25, 248, 86, 155, 124, 148, 58, 188, 57, 143, 57, 161, 117, 156, 119];
     let mut parser = Parser::new();
-    if let Err(_) = parser.push(&incoming_data, 11) {
+    if let Err(_) = parser.parse_yet(&incoming_data, 11) {
         assert!(true);
     }
 }
