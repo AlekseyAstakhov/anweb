@@ -43,8 +43,8 @@ impl Worker {
 
         mio_poll.register(&tcp_listener, LISTENER_TOKEN, mio::Ready::readable(), mio::PollOpt::level())?;
 
-        const POLL_EVENTS_CNT: usize = 1024;
-        const CLIENTS_CAPACITY: usize = 10000;
+        const POLL_EVENTS_CNT: usize = 4096;
+        const CLIENTS_CAPACITY: usize = 1000000;
 
         let http_date_string = Arc::new(RwLock::new(now_rfc7231_string()));
         start_thread_of_update_http_date_string(http_date_string.clone());
