@@ -256,15 +256,15 @@ pub fn test_request(port: u16, raw_request: &[u8], on_request: impl FnMut(Reques
                         if let Ok(mut tcp_stream) = tcp_stream {
                             let res = tcp_stream.set_write_timeout(Some(Duration::from_millis(8)));
                             assert!(res.is_ok());
-                            let res = tcp_stream.write(&raw_request);
+                            let res = tcp_stream.write_all(&raw_request);
                             assert!(res.is_ok());
 
                             let mut response: Vec<u8> = Vec::new();
                             let res = tcp_stream.set_read_timeout(Some(Duration::from_millis(64)));
                             assert!(res.is_ok());
-                            let begin_write = Instant::now();
+                            let begin_read = Instant::now();
                             loop {
-                                assert!(begin_write.elapsed() < Duration::from_secs(3));
+                                assert!(begin_read.elapsed() < Duration::from_secs(3));
 
                                 let res = tcp_stream.read_to_end(&mut response);
                                 if let Err(err) = &res {
