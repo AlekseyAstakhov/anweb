@@ -32,7 +32,7 @@ fn parse() {
 pub fn local_host() {
     test_request(
         9091,
-        "GET /query?first=text1&second=utf-8+%E0%AC%B6%E1%A8%87%D8%86 HTTP/1.0\r\n\r\n",
+        b"GET /query?first=text1&second=utf-8+%E0%AC%B6%E1%A8%87%D8%86 HTTP/1.0\r\n\r\n",
         |request| {
             assert_eq!(request.method(), "GET");
             assert_eq!(request.path(), "/query");

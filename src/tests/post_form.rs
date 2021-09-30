@@ -5,7 +5,7 @@ use crate::tests::request::test_request;
 fn localhost() {
     test_request(
         9092,
-        "POST /form HTTP/1.1\r\n\
+        b"POST /form HTTP/1.1\r\n\
         Connection: close\r\n\
         Content-Type: application/x-www-form-urlencoded\r\n\
         Content-Length: 70\r\n\r\n\

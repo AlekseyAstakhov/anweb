@@ -5,7 +5,7 @@ use crate::server::{Event, Server};
 use std::thread::sleep;
 use std::net::TcpStream;
 use std::io::{Write, Read};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use crate::request::Request;
 
 impl PartialEq for Header {
@@ -228,13 +228,13 @@ fn limits() {
 /// makes request ('raw_request') to the server,
 /// calls callback when request is received on server side, reads response,
 /// calls callback when response is received, and stops the server.
-pub fn test_request(port: u16, raw_request: &str, on_request: impl FnMut(Request)  + Send + Clone + 'static, on_response: impl FnMut(&[u8]) + Send + Clone + 'static) {
+pub fn test_request(port: u16, raw_request: &[u8], on_request: impl FnMut(Request)  + Send + Clone + 'static, on_response: impl FnMut(&[u8]) + Send + Clone + 'static) {
     let server = Server::new(&([0, 0, 0, 0], port).into());
     assert!(server.is_ok());
     if let Ok(server) = server {
         let num_threads = server.num_threads;
         let stopper = server.stopper();
-        let raw_request = raw_request.to_string();
+        let raw_request = raw_request.to_vec();
         let server_run_res = server.run(move |server_event| {
             match server_event {
                 Event::Incoming(tcp_session) => {
@@ -248,7 +248,7 @@ pub fn test_request(port: u16, raw_request: &str, on_request: impl FnMut(Request
                 Event::Started => {
                     let stopper = stopper.clone();
                     let mut on_response = on_response.clone();
-                    let raw_request = raw_request.clone();
+                    let raw_request = raw_request.to_vec();
                     std::thread::spawn(move || {
                         let addr = &format!("127.0.0.1:{}", port.to_string());
                         let tcp_stream = TcpStream::connect(addr);
@@ -256,14 +256,28 @@ pub fn test_request(port: u16, raw_request: &str, on_request: impl FnMut(Request
                         if let Ok(mut tcp_stream) = tcp_stream {
                             let res = tcp_stream.set_write_timeout(Some(Duration::from_millis(8)));
                             assert!(res.is_ok());
-                            let res = tcp_stream.write(raw_request.as_bytes());
+                            let res = tcp_stream.write(&raw_request);
                             assert!(res.is_ok());
 
                             let mut response: Vec<u8> = Vec::new();
                             let res = tcp_stream.set_read_timeout(Some(Duration::from_millis(64)));
                             assert!(res.is_ok());
-                            let res = tcp_stream.read_to_end(&mut response);
-                            assert!(res.is_ok());
+                            let begin_write = Instant::now();
+                            loop {
+                                assert!(begin_write.elapsed() < Duration::from_secs(3));
+
+                                let res = tcp_stream.read_to_end(&mut response);
+                                if let Err(err) = &res {
+                                    if err.kind() == std::io::ErrorKind::WouldBlock {
+                                        sleep(Duration::from_millis(1));
+                                        continue;
+                                    }
+                                }
+
+                                assert!(res.is_ok());
+                                break;
+                            }
+
                             on_response(&response);
 
                             stopper.stop();
@@ -286,7 +300,7 @@ pub fn test_request(port: u16, raw_request: &str, on_request: impl FnMut(Request
 fn hello_world() {
     test_request(
         9090,
-        "GET / HTTP/1.1\r\n\r\n",
+        b"GET / HTTP/1.1\r\n\r\n",
         |request| {
             assert_eq!(request.method(), "GET");
             assert_eq!(request.path(), "/");

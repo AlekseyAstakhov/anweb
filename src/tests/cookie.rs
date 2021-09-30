@@ -43,7 +43,7 @@ fn parse() {
 fn local_host() {
     test_request(
         9093,
-        "GET / HTTP/1.1\r\n\
+        b"GET / HTTP/1.1\r\n\
         Cookie: ABCD=-W-e-QSDEe-QSDEF3erw---W-e-Q-SDEF3erwqew-weqf-;key=Hello world!\r\n\
         Connection: keep-alive\r\n\
         Content-Length: 0\r\n\r\n",
