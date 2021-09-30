@@ -47,7 +47,7 @@ impl Request {
         &self.request_data.connection_type()
     }
     /// Value of header "Content-length", if no header then None.
-    pub fn content_len(&self) -> Option<usize> {
+    pub fn content_len(&self) -> usize {
         self.request_data.content_len()
     }
 
@@ -73,8 +73,16 @@ impl Request {
     }
 
     /// Read raw http content (this is what is after headers).
-    pub fn read_content(self, callback: impl FnMut(&[u8], ContentIsComplite) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
+    pub fn read_content(self, mut callback: impl FnMut(&[u8], ContentIsComplite) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
         let tcp_session = self.tcp_session.clone();
+
+        if self.content_len() == 0 {
+            if callback(b"", Some(self)).is_err() {
+                tcp_session.close();
+            }
+            return;
+        }
+
         if let Ok(mut content_callback) = tcp_session.inner.content_callback.lock() {
             *content_callback = Some((Box::new(callback), Some(self)));
         }
@@ -294,8 +302,8 @@ impl RequestData {
         &self.connection_type
     }
     /// Value of header "Content-length", if no header then None.
-    pub fn content_len(&self) -> Option<usize> {
-        self.content_len
+    pub fn content_len(&self) -> usize {
+        self.content_len.unwrap_or(0)
     }
 
     /// Cookies FROM FIRST HEADER "Cookie". RFC 6265, 5.4. "The Cookie Header: When the user agent generates an HTTP request, the user agent MUST NOT attach more than one Cookie header field".

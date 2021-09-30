@@ -123,16 +123,16 @@ impl WebSession {
             if let Ok(content_callback) = self.tcp_session.inner.content_callback.lock().as_deref_mut() {
                 let complete = false;
                 if let Some((content_callback, request)) = content_callback {
-                    if let Some(content_len) = content_len {
-                        http.content_len = content_len;
-                        http.already_read_content_len = 0;
-                    } else {
+                    if content_len == 0 {
                         let request = request.take();
                         if content_callback(b"", request).is_err() {
                             self.tcp_session.close();
                             return;
                         }
                     }
+
+                    http.content_len = content_len;
+                    http.already_read_content_len = 0;
                 }
 
                 if complete {
