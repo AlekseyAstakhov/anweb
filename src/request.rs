@@ -6,7 +6,7 @@ use crate::websocket::{Websocket, WebsocketResult, WebsocketError, HandshakeErro
 use crate::websocket;
 use crate::response::Response;
 
-/// HTTP request like "GET /?abc=123 HTTP/1.1\r\nConnection: keep-alive\r\n\r\n".
+/// Received request.
 pub struct Request {
     pub(crate) request_data: RequestData,
     pub(crate) tcp_session: TcpSession,
@@ -79,6 +79,23 @@ impl Request {
             *content_callback = Some((Box::new(callback), Some(self)));
         }
         drop(tcp_session);
+    }
+
+    /// Read content and parse it as form.
+    pub fn form(self, mut callback: impl FnMut(&Query, Request) -> Result<(), Box<dyn std::error::Error>> + Send + 'static) {
+        if self.has_post_form() {
+            let mut content = vec![];
+            self.read_content(move |data, complete| {
+                content.extend_from_slice(data);
+                if let Some(request) = complete {
+                    let form = parse_query(&content);
+                    return callback(&form, request);
+                }
+                Ok(())
+            })
+        } else {
+            self.response(422).text("Wrong form").close().send();
+        }
     }
 
     /// Begin work with websocket.
@@ -191,7 +208,8 @@ pub enum RequestError {
     ContentLengthParseError,
 }
 
-/// Request data after parse.
+/// HTTP request like "GET /?abc=123 HTTP/1.1\r\nConnection: keep-alive\r\n\r\n".
+/// after parse.
 #[derive(Clone)]
 pub struct RequestData {
     /// Raw buffer of request without content.

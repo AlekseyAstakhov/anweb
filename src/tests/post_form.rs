@@ -1,6 +1,5 @@
 use crate::request::HttpVersion;
 use crate::tests::request::test_request;
-use crate::query::parse_query;
 
 #[test]
 fn localhost() {
@@ -15,20 +14,13 @@ fn localhost() {
             assert_eq!(request.method(), "POST");
             assert_eq!(request.path(), "/form");
             assert_eq!(request.version(), &HttpVersion::Http1_1);
-            assert!(request.has_post_form());
 
-            let mut content = vec![];
-            request.read_content(move |data, content_is_complite| {
-                content.extend_from_slice(data);
-                if let Some(request) = content_is_complite {
-                    let form = parse_query(&content);
-                    assert_eq!(form.value("first"), Some("-ਊఈ௵".to_string()));
-                    assert_eq!(form.value("second"), Some("௵ఈਊ-".to_string()));
-                    request.response(200).send();
-                }
-
+            request.form(|form, request| {
+                assert_eq!(form.value("first"), Some("-ਊఈ௵".to_string()));
+                assert_eq!(form.value("second"), Some("௵ఈਊ-".to_string()));
+                request.response(200).send();
                 Ok(())
-            })
+            });
         },
         |response| {
             assert_eq!(

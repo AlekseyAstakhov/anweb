@@ -28,7 +28,11 @@ fn on_request(request: Request) -> Result<(), Box<dyn std::error::Error>> {
         }
         "/form" => {
             if request.method() == "POST" {
-                on_post_form(request);
+                request.form(|form, request| {
+                    let response_body = format!("Form: {:?}", form);
+                    request.response(200).text(&response_body).send();
+                    Ok(())
+                });
                 return Ok(());
             }
         }
@@ -39,28 +43,6 @@ fn on_request(request: Request) -> Result<(), Box<dyn std::error::Error>> {
     request.response(404).text("404 page not found").send();
 
     Ok(())
-}
-
-fn on_post_form(request: Request) {
-    if request.has_post_form() {
-        // Read content of the request.
-        let mut content = vec![];
-        request.read_content(move |data, content_is_complite| {
-            // Collect content chunks.
-            content.extend_from_slice(data);
-            // When all chunks received
-            if let Some(request) = content_is_complite {
-                // Parse content data as query.
-                let form = parse_query(&content);
-                let response_body = format!("Form: {:?}", form);
-                request.response(200).text(&response_body).send();
-            }
-
-            Ok(())
-        });
-    } else {
-        request.response(422).text("Wrong form").close().send();
-    }
 }
 
 const INDEX_HTML: &str = r#"
