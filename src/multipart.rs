@@ -50,7 +50,7 @@ impl MultipartParser {
                     // (RFC 2046)
 
                     if let Some((boundary_pos, closing_boundary)) = self.find_boundary(&self.buf) {
-                        self.state = ParseState::FindDisposition;
+                        self.state = ParseState::Disposition;
 
                         if closing_boundary {
                             // This is not explicitly defined in the RFC 2046, but browsers send
@@ -70,7 +70,7 @@ impl MultipartParser {
 
                     break; // need more data
                 }
-                ParseState::FindDisposition => {
+                ParseState::Disposition => {
                     if let Some(pos) = self.buf.windows(4).position(|win| win == b"\r\n\r\n") {
                         let raw_disposition = &self.buf[0..pos];
                         f(MultipartParserEvent::Disposition(&Disposition { raw: raw_disposition }));
@@ -88,7 +88,7 @@ impl MultipartParser {
                             f(MultipartParserEvent::Data { data_part, end: true });
                         }
 
-                        self.state = ParseState::FindDisposition;
+                        self.state = ParseState::Disposition;
 
                         if closing_boundary {
                             f(MultipartParserEvent::Finished);
@@ -157,7 +157,7 @@ pub enum MultipartParserEvent<'a> {
 
 enum ParseState {
     FindFirstBoundary,
-    FindDisposition,
+    Disposition,
     ReadData,
 }
 
