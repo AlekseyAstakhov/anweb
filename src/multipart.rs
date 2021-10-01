@@ -135,7 +135,13 @@ impl MultipartParser {
 
 /// Disposition of multipart part.
 pub struct Disposition<'a> {
-    pub raw: &'a [u8],
+    raw: &'a [u8],
+}
+
+impl<'a> Disposition<'a>  {
+    pub fn raw(&self) -> &[u8] {
+        &self.raw
+    }
 }
 
 /// Event of multipart parser.

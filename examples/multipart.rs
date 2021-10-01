@@ -33,7 +33,7 @@ fn on_request(request: Request) -> Result<(), Box<dyn std::error::Error>> {
                     multipart.push(data, |ev| {
                         match ev {
                             MultipartParserEvent::Disposition(disposition) => {
-                                response_body += &format!("disposition: {:?}\n", from_utf8(&disposition.raw).unwrap());
+                                response_body += &format!("disposition: {:?}\n", from_utf8(&disposition.raw()).unwrap());
                             },
                             MultipartParserEvent::Data { data_part: _, end: _ } => {
                             },
