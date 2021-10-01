@@ -134,6 +134,7 @@ impl MultipartParser {
 }
 
 /// Disposition of multipart part.
+#[derive(Debug)]
 pub struct Disposition<'a> {
     raw: &'a [u8],
 }
