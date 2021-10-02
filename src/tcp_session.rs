@@ -189,7 +189,7 @@ impl TcpSession {
     pub(crate) fn call_websocket_callback(&self, frame: WebsocketResult) {
         if let Ok(mut callback) = self.inner.websocket_callback.lock() {
             if let Some(callback) = &mut *callback {
-                if callback(frame, Websocket { tcp_session: self.clone() }).is_err() {
+                if callback(frame, Websocket::new(self.clone())).is_err() {
                     self.close();
                 }
             }

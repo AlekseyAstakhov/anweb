@@ -9,7 +9,7 @@ pub const CLOSE_OPCODE: u8 = 0x8;
 
 #[derive(Clone)]
 pub struct Websocket {
-    pub(crate) tcp_session: TcpSession,
+    tcp_session: TcpSession,
 }
 
 impl Websocket {
@@ -33,6 +33,10 @@ impl Websocket {
     /// Returns reference to the TCP session of this websocket.
     pub fn tcp_session(&self) -> &TcpSession {
         &self.tcp_session
+    }
+
+    pub(crate) fn new(tcp_session: TcpSession) -> Self {
+        Websocket { tcp_session }
     }
 }
 

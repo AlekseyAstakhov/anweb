@@ -120,7 +120,7 @@ impl Request {
             *websocket_callback = Some(Box::new(callback));
         }
 
-        Ok(Websocket { tcp_session: self.tcp_session.clone() })
+        Ok(Websocket::new(self.tcp_session.clone()))
     }
 
 
