@@ -78,6 +78,7 @@ impl Websocket {
 pub type WebsocketResult<'a> = Result<&'a Frame, WebsocketError>;
 
 /// Error of websocket such as parsing frame or read from socket.
+#[derive(Debug)]
 pub enum WebsocketError {
     /// Read from sock error.
     ReadError(std::io::Error),
