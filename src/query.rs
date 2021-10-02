@@ -3,19 +3,19 @@ use std::fmt::Debug;
 
 #[derive(Debug)]
 /// Parsed query.
-pub struct Query<'a> {
-    pub parts: Vec<QueryNameValue<'a>>,
+pub struct Query <'a, 'b> {
+    pub parts: Vec<QueryNameValue<'a, 'b>>,
 }
 
 /// Query part as "b=2" in request like "GET /?a=1&b=2&c=3 HTTP/1.1\r\n\r\n".
-pub struct QueryNameValue<'a> {
+pub struct QueryNameValue <'a, 'b> {
     /// Name. Can't be empty.
     pub name: &'a [u8],
     /// Value. Can be empty.
-    pub value: &'a [u8],
+    pub value: &'b [u8],
 }
 
-impl Query<'_> {
+impl Query<'_, '_> {
     /// Return first value by name.
     pub fn value(&self, name: &str) -> Option<String> {
         for query_part in self.iter() {
@@ -41,15 +41,15 @@ impl Query<'_> {
     }
 }
 
-impl<'a> std::ops::Deref for Query<'a> {
-    type Target = Vec<QueryNameValue<'a>>;
+impl<'a, 'b> std::ops::Deref for Query<'a, 'b> {
+    type Target = Vec<QueryNameValue<'a, 'b>>;
 
     fn deref(&self) -> &Self::Target {
         &self.parts
     }
 }
 
-impl<'a> std::ops::DerefMut for Query<'a> {
+impl std::ops::DerefMut for Query<'_, '_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.parts
     }
@@ -93,7 +93,7 @@ pub fn parse_query(query: &[u8]) -> Query {
     result
 }
 
-impl<'a> Debug for QueryNameValue<'a> {
+impl Debug for QueryNameValue<'_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut f = f.debug_struct("QueryNameValue");
         let f = if let Ok(decoded_name) = percent_decode(&self.name).decode_utf8() {

@@ -2,7 +2,7 @@ use crate::query::{parse_query, QueryNameValue};
 use crate::tests::request::test_request;
 use crate::request::HttpVersion;
 
-impl<'a> PartialEq for QueryNameValue<'a> {
+impl PartialEq for QueryNameValue<'_, '_> {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name && self.value == other.value
     }
