@@ -7,44 +7,6 @@ pub const TEXT_OPCODE: u8 = 0x1;
 pub const BINARY_OPCODE: u8 = 0x2;
 pub const CLOSE_OPCODE: u8 = 0x8;
 
-/// Generate response to upgrade connection request. Check only Sec-WebSocket-Key header of request!
-pub fn handshake_response(request: &RequestData) -> Result<Vec<u8>, HandshakeError> {
-    const MAGIC_STRING_FOR_HANDSHAKE: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-
-    let key = request.header_value("Sec-WebSocket-Key")
-        .ok_or(HandshakeError::NoSecWebSocketKeyHeader)?;
-
-    let mut hasher = Sha1::new();
-    hasher.input((key.to_owned() + MAGIC_STRING_FOR_HANDSHAKE).as_bytes());
-    let accept_sha1 = hasher.result();
-    let accept = base64::encode(&accept_sha1);
-
-    let protocol = if let Some(protocol) = request.header_value("Sec-WebSocket-Protocol") {
-        format!("Sec-WebSocket-Protocol: {}\r\n", &protocol)
-    } else {
-        String::new()
-    };
-
-    let response = format!(
-        "{} 101 Switching Protocols\r\n\
-         Upgrade: websocket\r\n\
-         Connection: Upgrade\r\n\
-         Sec-WebSocket-Accept: {}\r\n\
-         {}\
-         \r\n",
-        request.version().to_string_for_response(),
-        &accept,
-        &protocol
-    );
-
-    return Ok(Vec::from(response));
-}
-
-#[derive(Debug)]
-pub enum HandshakeError {
-    NoSecWebSocketKeyHeader
-}
-
 #[derive(Clone)]
 pub struct Websocket {
     pub(crate) tcp_session: TcpSession,
@@ -86,6 +48,44 @@ pub enum WebsocketError {
     ParseFrameError(ParseFrameError),
     /// Register in poll error.
     PollRegisterError(std::io::Error),
+}
+
+#[derive(Debug)]
+pub enum WebsocketHandshakeError {
+    NoSecWebSocketKeyHeader
+}
+
+/// Generate response to upgrade connection request. Check only Sec-WebSocket-Key header of request!
+pub fn handshake_response(request: &RequestData) -> Result<Vec<u8>, WebsocketHandshakeError> {
+    const MAGIC_STRING_FOR_HANDSHAKE: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+    let key = request.header_value("Sec-WebSocket-Key")
+        .ok_or(WebsocketHandshakeError::NoSecWebSocketKeyHeader)?;
+
+    let mut hasher = Sha1::new();
+    hasher.input((key.to_owned() + MAGIC_STRING_FOR_HANDSHAKE).as_bytes());
+    let accept_sha1 = hasher.result();
+    let accept = base64::encode(&accept_sha1);
+
+    let protocol = if let Some(protocol) = request.header_value("Sec-WebSocket-Protocol") {
+        format!("Sec-WebSocket-Protocol: {}\r\n", &protocol)
+    } else {
+        String::new()
+    };
+
+    let response = format!(
+        "{} 101 Switching Protocols\r\n\
+         Upgrade: websocket\r\n\
+         Connection: Upgrade\r\n\
+         Sec-WebSocket-Accept: {}\r\n\
+         {}\
+         \r\n",
+        request.version().to_string_for_response(),
+        &accept,
+        &protocol
+    );
+
+    return Ok(Vec::from(response));
 }
 
 /// Make vector containing frame based on the specified opcode and payload data.
@@ -260,6 +260,15 @@ impl Parser {
     }
 }
 
+impl Default for Parser {
+    fn default() -> Self {
+        Parser {
+            frame: Frame::new(),
+            state: ParserState::ParseFirstByteWhereFinAndOpcode,
+        }
+    }
+}
+
 /// Parsed websocket frame. See RFC: 6455 section 5.2, Base Framing Protocol.
 /// No mask because server accept only frames where mask==1.
 #[derive(Debug)]
@@ -367,15 +376,6 @@ pub enum ParseFrameError {
     PayloadLimit,
 }
 
-impl Default for Parser {
-    fn default() -> Self {
-        Parser {
-            frame: Frame::new(),
-            state: ParserState::ParseFirstByteWhereFinAndOpcode,
-        }
-    }
-}
-
 
 impl From<std::io::Error> for WebsocketError {
     fn from(err: std::io::Error) -> Self {
@@ -389,11 +389,11 @@ impl From<ParseFrameError> for WebsocketError {
     }
 }
 
-impl std::fmt::Display for HandshakeError {
+impl std::fmt::Display for WebsocketHandshakeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-impl std::error::Error for HandshakeError {
+impl std::error::Error for WebsocketHandshakeError {
 }
