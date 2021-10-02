@@ -1,17 +1,17 @@
 /// Cookie that the server sends to the client.
 #[derive(Debug)]
-pub struct Cookie<'a> {
+pub struct Cookie<'a, 'b, 'c, 'd, 'e> {
     /// Cookie name. Can't be empty.
     pub name: &'a str,
     /// Cookie value. Can be empty.
-    pub value: &'a str,
+    pub value: &'b str,
 
     /// Path attribute indicates a URL path that must exist in the requested resource before sending the Cookie header.
-    pub path: Option<&'a str>,
+    pub path: Option<&'c str>,
     /// Domain attribute specifies those hosts to which the cookie will be sent. If not specified, defaults to the host portion of the current document location (but not including subdomains).
-    pub domain: Option<&'a str>,
+    pub domain: Option<&'d str>,
     /// Expires attribute indicates cookie expiration date.
-    pub expires: Option<&'a str>,
+    pub expires: Option<&'e str>,
 
     // Max-Age attribute indicates the maximum lifetime of the cookie in seconds.
     pub max_age: Option<i32>,
@@ -21,7 +21,7 @@ pub struct Cookie<'a> {
     pub secure: bool,
 }
 
-impl<'a> Cookie<'a> {
+impl<'a, 'b, 'c, 'd, 'e> Cookie<'a, 'b, 'c, 'd, 'e> {
     /// Prepared cookie for remove on the browser side.
     pub fn remove(name: &'a str) -> Self {
         Cookie {
@@ -51,7 +51,7 @@ impl<'a> Cookie<'a> {
     }
 }
 
-impl<'a> std::fmt::Display for Cookie<'a> {
+impl<'a, 'b, 'c, 'd, 'e> std::fmt::Display for Cookie<'a, 'b, 'c, 'd, 'e> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.write_str(&format!("Set-Cookie: {}={}{}{}{}{}{}{}\r\n",
             self.name,
