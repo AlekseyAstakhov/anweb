@@ -21,7 +21,7 @@ pub struct Cookie<'a, 'b, 'c, 'd, 'e> {
     pub secure: bool,
 }
 
-impl<'a, 'b, 'c, 'd, 'e> Cookie<'a, 'b, 'c, 'd, 'e> {
+impl<'a> Cookie<'a, '_, '_, '_, '_> {
     /// Prepared cookie for remove on the browser side.
     pub fn remove(name: &'a str) -> Self {
         Cookie {
@@ -51,7 +51,7 @@ impl<'a, 'b, 'c, 'd, 'e> Cookie<'a, 'b, 'c, 'd, 'e> {
     }
 }
 
-impl<'a, 'b, 'c, 'd, 'e> std::fmt::Display for Cookie<'a, 'b, 'c, 'd, 'e> {
+impl std::fmt::Display for Cookie<'_, '_, '_, '_, '_> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.write_str(&format!("Set-Cookie: {}={}{}{}{}{}{}{}\r\n",
             self.name,

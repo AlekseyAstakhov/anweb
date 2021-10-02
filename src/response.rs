@@ -5,9 +5,9 @@ pub struct Response<'a, 'b, 'c, 'd, 'e> {
     /// HTTP response code.
     code: u16,
     /// Value of "Content-Type" header.
-    content_type: &'b str,
+    content_type: &'a str,
     /// Data of HTTP response content.
-    content: &'a[u8],
+    content: &'b[u8],
     /// If Some - Connection header will be set from value.
     /// If None - Connection header will be set by request Connection header and HTTP version.
     keep_alive_connection: Option<bool>,
@@ -73,7 +73,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
 
     /// Set any type content.
     #[inline(always)]
-    pub fn content(&mut self, content_type: &'b str, content: &'a [u8]) -> &mut Self {
+    pub fn content(&mut self, content_type: &'a str, content: &'b [u8]) -> &mut Self {
         self.content_type = content_type;
         self.content = content;
         self
@@ -81,7 +81,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
 
     /// Set "text/plain; charset=utf-8" content.
     #[inline(always)]
-    pub fn text(&mut self, text: &'a str) -> &mut Self {
+    pub fn text(&mut self, text: &'b str) -> &mut Self {
         self.content_type = "Content-Type: text/plain; charset=utf-8\r\n";
         self.content = text.as_bytes();
         self
@@ -89,7 +89,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
 
     /// Set "text/html; charset=utf-8" content.
     #[inline(always)]
-    pub fn html(&mut self, html: &'a str) -> &mut Self {
+    pub fn html(&mut self, html: &'b str) -> &mut Self {
         self.content_type = "Content-Type: text/html; charset=utf-8\r\n";
         self.content = html.as_bytes();
         self
@@ -97,7 +97,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
 
     /// Set "application/wasm" content.
     #[inline(always)]
-    pub fn wasm(&mut self, wasm_data: &'a [u8]) -> &mut Self {
+    pub fn wasm(&mut self, wasm_data: &'b [u8]) -> &mut Self {
         self.content_type = "Content-Type: application/wasm\r\n";
         self.content = wasm_data;
         self
@@ -158,7 +158,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
         }
     }
 
-    fn connection_str<'r>(&self, request: &'r RequestData) -> &'static str {
+    fn connection_str(&self, request: &RequestData) -> &'static str {
         if let Some(keep_alive_connection) = self.keep_alive_connection {
             if keep_alive_connection {
                 "Connection: keep_alive\r\n"
