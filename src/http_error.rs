@@ -7,8 +7,8 @@ pub enum HttpError {
     ReadError(std::io::Error),
     /// Error of parsing data.
     ParseRequestError(RequestError),
-    /// Write to sock error.
-    WriteError(std::io::Error),
+    /// Register in poll error.
+    PollRegisterError(std::io::Error),
 }
 
 impl From<std::io::Error> for HttpError {

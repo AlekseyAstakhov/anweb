@@ -51,9 +51,16 @@ pub struct Websocket {
 }
 
 impl Websocket {
-    /// Send raw data via socket.
+    /// Send frame.
     pub fn send(&self, opcode: u8, payload: &[u8]) {
         self.tcp_session.send(&frame(opcode, payload));
+    }
+
+    /// Send frame.
+    /// # Arguments
+    /// * `res_callback` - function that will be called when the write is finished or socket writing error.
+    pub fn try_send(&self, opcode: u8, payload: &[u8], res_callback: impl FnMut(Result<(), std::io::Error>) + Send + 'static) {
+        self.tcp_session.try_send(&frame(opcode, payload), res_callback);
     }
 
     /// Close of client socket. After clossing will be generated `sever::Event::Disconnected`.
@@ -76,8 +83,8 @@ pub enum WebsocketError {
     ReadError(std::io::Error),
     /// Error of parsing data.
     ParseFrameError(ParseFrameError),
-    /// Write to sock error.
-    WriteError(std::io::Error),
+    /// Register in poll error.
+    PollRegisterError(std::io::Error),
 }
 
 /// Make vector containing frame based on the specified opcode and payload data.

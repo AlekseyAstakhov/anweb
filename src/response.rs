@@ -25,6 +25,13 @@ pub struct Response<'a, 'b, 'c, 'd, 'e> {
 impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
     /// Builds response and send it to the client.
     pub fn send(&self) {
+        self.try_send(|_| {});
+    }
+
+    /// Builds response and send it to the client.
+    /// # Arguments
+    /// * `res_callback` - function that will be called when the write is finished or socket writing error.
+    pub fn try_send(&self, res_callback: impl FnMut(Result<(), std::io::Error>) + Send + 'static) {
         let mut response = Vec::from(format!(
         "{} {}\r\n\
          Date: {}\r\n\
@@ -61,7 +68,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
             self.request.tcp_session().close_after_send();
         }
 
-        self.request.tcp_session().send(&response);
+        self.request.tcp_session().try_send(&response, res_callback);
     }
 
     /// Set any type content.
