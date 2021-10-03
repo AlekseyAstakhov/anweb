@@ -94,7 +94,6 @@ impl Server {
     /// # Arguments
     ///
     /// * `event_callback` - A server event callback function.
-    /// ```
     pub fn run(mut self, event_callback: impl Fn(Event) + Send + Clone + 'static) -> Result<(), std::io::Error> {
         self.workers = Vec::with_capacity(self.num_threads);
 
