@@ -109,10 +109,10 @@ impl Request {
     /// Begin work with websocket.
     /// # Arguments
     /// * `payload` - extra raw data that will send together with handshake response. Must be prepared as frame(frames).
-    pub fn accept_websocket(&mut self, payload: Vec<u8>) -> Result<Websocket, WebsocketHandshakeError>
+    pub fn accept_websocket(&mut self, payload: &[u8]) -> Result<Websocket, WebsocketHandshakeError>
     {
         let mut response =  websocket::handshake_response(&self.request_data)?;
-        response.extend_from_slice(&payload);
+        response.extend_from_slice(payload);
         self.tcp_session.send(&response);
 
         Ok(Websocket::new(self.tcp_session.clone()))
