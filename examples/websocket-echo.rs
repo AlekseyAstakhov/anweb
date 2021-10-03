@@ -1,5 +1,6 @@
 use anweb::server;
 use anweb::server::Server;
+use anweb::request::Request;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = ([0, 0, 0, 0], 8080).into();
@@ -9,35 +10,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     server.run(|server_event| {
         if let server::Event::Incoming(tcp_session) = server_event {
-            tcp_session.to_http(|http_result| {
-                let request = http_result?;
-                match request.path() {
-                    "/" => {
-                        request.response(200).html(INDEX_HTML).send();
-                    }
-                    "/ws" => {
-                        // Try process websocket handshake request and switch connection
-                        // to websocket mode, it will no longer process http requests.
-                        request.accept_websocket()?.on_frame(|websocket_result, websocket| {
-                            // This callback will be called if a new frame arrives from the client
-                            // or an error occurs.
+            tcp_session.to_http(|request| {
+                on_request(request?)
+            });
+        }
+    })?;
 
-                            // Send echo frame to the client.
-                            let received_frame = websocket_result?;
-                            websocket.send(received_frame.opcode(), received_frame.payload());
+    Ok(())
+}
 
-                            Ok(())
-                        });
-                    }
-                    _ => {
-                        request.response(404).text("404 page not found").send();
-                    }
-                }
+fn on_request(request: Request) -> Result<(), Box<dyn std::error::Error>> {
+    match request.path() {
+        "/" => {
+            request.response(200).html(INDEX_HTML).send();
+        }
+        "/ws" => {
+            // Try process websocket handshake request and switch connection
+            // to websocket mode, it will no longer process http requests.
+            request.accept_websocket()?.on_frame(|websocket_result, websocket| {
+                // This callback will be called if a new frame arrives from the client
+                // or an error occurs.
+
+                // Send echo frame to the client.
+                let received_frame = websocket_result?;
+                websocket.send(received_frame.opcode(), received_frame.payload());
 
                 Ok(())
             });
         }
-    })?;
+        _ => {
+            request.response(404).text("404 page not found").send();
+        }
+    }
 
     Ok(())
 }
