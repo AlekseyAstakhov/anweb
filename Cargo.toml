@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 mio = "0.6"
-slab = "0.4.2"
+slab = "0.4.4"
 num_cpus = "1"
 sha-1 = "0.9.8"
 base64 = "0.13.0"
