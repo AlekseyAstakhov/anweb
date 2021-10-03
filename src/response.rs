@@ -33,7 +33,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
     /// * `res_callback` - function that will be called when the write is finished or socket writing error.
     pub fn try_send(&self, res_callback: impl FnMut(Result<(), std::io::Error>) + Send + 'static) {
         let mut response = Vec::from(format!(
-        "{} {}\r\n\
+            "{} {}\r\n\
          Date: {}\r\n\
          {}\
          Content-Length: {}\r\n\
@@ -45,7 +45,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
             self.request.version().to_string_for_response(),
             http_status_code_with_name(self.code),
             self.request.rfc7231_date_string(),
-            self.connection_str(&self.request.parsed_reauest()),
+            self.connection_str(&self.request.request_data()),
             self.content.len(),
             self.content_type,
             if let Some(headers) = self.headers { headers } else { "" },
@@ -61,7 +61,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
             if let Some(keep_alive_connection) = self.keep_alive_connection {
                 !keep_alive_connection
             } else {
-                need_close_by_request(&self.request.request_data)
+                need_close_by_request(&self.request.request_data())
             };
 
         if need_close_after_response {

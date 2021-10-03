@@ -104,7 +104,7 @@ impl StaticFiles {
     pub fn send_response(&self, path: &str, request: &Request) -> io::Result<()> {
         let mut result = Ok(());
 
-        let need_close_by_request = need_close_by_request(&request.request_data);
+        let need_close_by_request = need_close_by_request(&request.request_data());
 
         self.get(path, |static_file| {
             match static_file {
@@ -135,16 +135,16 @@ impl StaticFiles {
                              \r\n",
                             request.version().to_string_for_response(),
                             request.rfc7231_date_string(),
-                            crate::response::connection_str_by_request(request.parsed_reauest()),
+                            crate::response::connection_str_by_request(request.request_data()),
                             if static_file.last_modified_rfc7231.is_empty() { "".to_string() } else { format!("Last-Modified: {}\r\n", static_file.last_modified_rfc7231) },
                             if static_file.etag.is_empty() { "".to_string() } else { format!("ETag: {}\r\n", static_file.etag) }
                         ));
 
                         if need_close_by_request {
-                            request.tcp_session.close_after_send();
+                            request.tcp_session().close_after_send();
                         }
 
-                        request.tcp_session.send(&response);
+                        request.tcp_session().send(&response);
 
                         return;
                     }
@@ -177,7 +177,7 @@ impl StaticFiles {
                          \r\n",
                         request.version().to_string_for_response(),
                         request.rfc7231_date_string(),
-                        crate::response::connection_str_by_request(request.parsed_reauest()),
+                        crate::response::connection_str_by_request(request.request_data()),
                         content_header,
                         if static_file.last_modified_rfc7231.is_empty() { "".to_string() } else { format!("Last-Modified: {}\r\n", static_file.last_modified_rfc7231) },
                         if static_file.etag.is_empty() { "".to_string() } else { format!("ETag: {}\r\n", static_file.etag) },
@@ -188,13 +188,13 @@ impl StaticFiles {
                     if content.len() < self.united_response_limit {
                         response.extend(&content[..]);
                         if need_close_by_request {
-                            request.tcp_session.close_after_send();
+                            request.tcp_session().close_after_send();
                         }
                         request.tcp_session().send(&response);
                     } else {
                         request.tcp_session().send(&response);
                         if need_close_by_request {
-                            request.tcp_session.close_after_send();
+                            request.tcp_session().close_after_send();
                         }
                         request.tcp_session().send_arc(content);
                     }

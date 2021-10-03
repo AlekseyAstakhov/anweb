@@ -118,7 +118,7 @@ impl WebSession {
         if let State::Http(http) = &mut self.state {
             let content_len = received_request.content_len();
 
-            self.tcp_session.call_http_callback(Ok(Request { request_data: received_request, tcp_session: self.tcp_session.clone() }));
+            self.tcp_session.call_http_callback(Ok(Request::new(received_request, self.tcp_session.clone())));
 
             if let Ok(content_callback) = self.tcp_session.inner.content_callback.lock().as_deref_mut() {
                 let complete = false;

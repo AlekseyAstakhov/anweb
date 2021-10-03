@@ -8,8 +8,8 @@ use crate::response::Response;
 
 /// Received request.
 pub struct Request {
-    pub(crate) request_data: RequestData,
-    pub(crate) tcp_session: TcpSession,
+    request_data: RequestData,
+    tcp_session: TcpSession,
 }
 
 impl Request {
@@ -63,7 +63,7 @@ impl Request {
     }
 
     /// Return reference to request data structure.
-    pub fn parsed_reauest(&self) -> &RequestData {
+    pub fn request_data(&self) -> &RequestData {
         &self.request_data
     }
 
@@ -156,6 +156,10 @@ impl Request {
             // this code must be unreachable
             String::new()
         }
+    }
+
+    pub(crate) fn new(request_data: RequestData, tcp_session: TcpSession,) -> Self {
+        Self { request_data, tcp_session }
     }
 }
 
