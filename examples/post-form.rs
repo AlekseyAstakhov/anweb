@@ -1,4 +1,3 @@
-use anweb::query::parse_query;
 use anweb::server::{Event, Server};
 use anweb::request::Request;
 
