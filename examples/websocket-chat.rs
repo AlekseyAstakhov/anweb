@@ -7,6 +7,7 @@ use rustls::{NoClientAuth, ServerConfig};
 use std::collections::btree_map::BTreeMap;
 use std::str::from_utf8;
 use std::sync::{Arc, Mutex, RwLock};
+use anweb::request::Request;
 
 struct Chat {
     users: RwLock<BTreeMap<u64 /*tcp session id*/, Websocket>>,
@@ -39,36 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             server::Event::Incoming(tcp_session) => {
                 let chat = chat.clone();
                 tcp_session.to_http(move |http_result| {
-                    let mut request = http_result?;
-                    match request.path() {
-                        "/" => {
-                            request.response(200).html(INDEX_HTML).send();
-                        }
-                        "/ws" => {
-                            if let Ok(messages) = chat.messages.lock() {
-                                // Prepares full current chat that will send with response to handshake request.
-                                let mut full_chat_frames = vec![];
-                                for msg in messages.iter() {
-                                    full_chat_frames.extend(frame(TEXT_OPCODE, msg.as_bytes()));
-                                }
-
-                                let cloned_chat = chat.clone();
-                                let websocket = request.accept_websocket(Some(&full_chat_frames))?;
-                                websocket.on_frame(move |received_frame, _| {
-                                    on_websocket_frame(received_frame?, &cloned_chat);
-                                    Ok(())
-                                });
-
-                                let mut users = chat.users.write().unwrap();
-                                users.insert(websocket.tcp_session().id(), websocket.clone());
-                            }
-                        }
-                        _ => {
-                            request.response(404).text("404 page not found").send();
-                        }
-                    }
-
-                    Ok(())
+                    on_request(http_result?, &chat)
                 });
             }
             server::Event::Closed(sesion_id) => {
@@ -79,6 +51,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ => (),
         }
     })?;
+
+    Ok(())
+}
+
+fn on_request(request: Request, chat: &Arc<Chat>) -> Result<(), Box<dyn std::error::Error>> {
+    match request.path() {
+        "/" => {
+            request.response(200).html(INDEX_HTML).send();
+        }
+        "/ws" => {
+            if let Ok(messages) = chat.messages.lock() {
+                // Prepares full current chat that will send with response to handshake request.
+                let mut full_chat_frames = vec![];
+                for msg in messages.iter() {
+                    full_chat_frames.extend(frame(TEXT_OPCODE, msg.as_bytes()));
+                }
+
+                let cloned_chat = chat.clone();
+                let websocket = request.accept_websocket(Some(&full_chat_frames))?;
+                websocket.on_frame(move |received_frame, _| {
+                    on_websocket_frame(received_frame?, &cloned_chat);
+                    Ok(())
+                });
+
+                let mut users = chat.users.write().unwrap();
+                users.insert(websocket.tcp_session().id(), websocket.clone());
+            }
+        }
+        _ => {
+            request.response(404).text("404 page not found").send();
+        }
+    }
 
     Ok(())
 }
