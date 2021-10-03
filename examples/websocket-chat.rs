@@ -46,14 +46,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         "/ws" => {
                             if let Ok(messages) = chat.messages.lock() {
-                                // give full current chat
+                                // Prepares full current chat that will send with response to handshake request.
                                 let mut full_chat_frames = vec![];
                                 for msg in messages.iter() {
                                     full_chat_frames.extend(frame(TEXT_OPCODE, msg.as_bytes()));
                                 }
 
                                 let cloned_chat = chat.clone();
-                                let websocket = request.accept_websocket(&full_chat_frames)?;
+                                let websocket = request.accept_websocket(Some(&full_chat_frames))?;
                                 websocket.on_frame(move |received_frame, _| {
                                     on_websocket_frame(received_frame?, &cloned_chat);
                                     Ok(())

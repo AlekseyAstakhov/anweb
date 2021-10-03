@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "/ws" => {
                         // Try process websocket handshake request and switch connection
                         // to websocket mode, it will no longer process http requests.
-                        let websocket = request.accept_websocket(b"")?;
+                        let websocket = request.accept_websocket(None)?;
                         websocket.on_frame(|websocket_result, websocket| {
                             // This callback will be called if a new frame arrives from the client
                             // or an error occurs.
