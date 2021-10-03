@@ -2,7 +2,7 @@ use crate::cookie::{parse_cookie, CookieOfRequst};
 use crate::query::{parse_query, Query};
 use std::str::from_utf8;
 use crate::tcp_session::{ContentIsComplite, TcpSession};
-use crate::websocket::{Websocket, WebsocketResult, WebsocketError, WebsocketHandshakeError};
+use crate::websocket::{Websocket, WebsocketHandshakeError};
 use crate::websocket;
 use crate::response::Response;
 
@@ -109,20 +109,14 @@ impl Request {
     /// Begin work with websocket.
     /// # Arguments
     /// * `payload` - extra raw data that will send together with handshake response. Must be prepared as frame(frames).
-    /// * `callback` - Will called every time a datagram is received or some error such as read/write sock errors or parsing frames.
-    pub fn accept_websocket(&mut self, payload: Vec<u8>, callback: impl FnMut(WebsocketResult, Websocket) -> Result<(), WebsocketError> + Send + 'static) -> Result<Websocket, WebsocketHandshakeError>
+    pub fn accept_websocket(&mut self, payload: Vec<u8>) -> Result<Websocket, WebsocketHandshakeError>
     {
         let mut response =  websocket::handshake_response(&self.request_data)?;
         response.extend_from_slice(&payload);
         self.tcp_session.send(&response);
 
-        if let Ok(mut websocket_callback) = self.tcp_session.inner.websocket_callback.lock() {
-            *websocket_callback = Some(Box::new(callback));
-        }
-
         Ok(Websocket::new(self.tcp_session.clone()))
     }
-
 
     /// Raw buffer of request.
     pub fn raw(&self) -> &[u8] {

@@ -18,7 +18,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "/ws" => {
                         // Try process websocket handshake request and switch connection
                         // to websocket mode, it will no longer process http requests.
-                        request.accept_websocket(vec![], |websocket_result, websocket| {
+                        let websocket = request.accept_websocket(vec![])?;
+                        websocket.on_frame(|websocket_result, websocket| {
                             // This callback will be called if a new frame arrives from the client
                             // or an error occurs.
                             let received_frame = websocket_result?;
@@ -26,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             // Need return Ok(()) from this callback.
                             // If you return any error then the tcp connection will be closed.
                             Ok(())
-                        })?;
+                        });
                     }
                     _ => {
                         request.response(404).text("404 page not found").send();

@@ -53,10 +53,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
 
                                 let cloned_chat = chat.clone();
-                                let websocket = request.accept_websocket(full_chat_frames, move |received_frame, _| {
+                                let websocket = request.accept_websocket(full_chat_frames)?;
+                                websocket.on_frame(move |received_frame, _| {
                                     on_websocket_frame(received_frame?, &cloned_chat);
                                     Ok(())
-                                })?;
+                                });
 
                                 let mut users = chat.users.write().unwrap();
                                 users.insert(websocket.tcp_session().id(), websocket.clone());
