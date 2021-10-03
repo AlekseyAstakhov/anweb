@@ -13,17 +13,17 @@ pub struct Websocket {
 }
 
 impl Websocket {
-    /// Send frame.
-    pub fn send(&self, opcode: u8, payload: &[u8]) {
-        self.tcp_session.send(&frame(opcode, payload));
-    }
-
     // Set callback that will called every time a datagram is received
     // or some error such as read/write sock errors or parsing frames.
     pub fn on_frame(&self, callback: impl FnMut(WebsocketResult, Websocket) -> Result<(), WebsocketError> + Send + 'static) {
         if let Ok(mut websocket_callback) = self.tcp_session.inner.websocket_callback.lock() {
             *websocket_callback = Some(Box::new(callback));
         }
+    }
+
+    /// Send frame.
+    pub fn send(&self, opcode: u8, payload: &[u8]) {
+        self.tcp_session.send(&frame(opcode, payload));
     }
 
     /// Send frame.
