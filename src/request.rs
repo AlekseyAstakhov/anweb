@@ -136,15 +136,16 @@ impl Request {
         };
 
         let mut response =  Vec::from(format!(
-            "{} 101 Switching Protocols\r\n\
+            "HTTP/1.1 101 Switching Protocols\r\n\
             Upgrade: websocket\r\n\
             Connection: Upgrade\r\n\
             Sec-WebSocket-Accept: {}\r\n\
             {}\
+            Date: {}\r\n\
             \r\n",
-            self.version().to_string_for_response(),
             &accept,
-            &protocol
+            &protocol,
+            self.rfc7231_date_string(),
         ));
 
         for (opcode, payload) in extra_frames {
