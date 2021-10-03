@@ -109,12 +109,35 @@ impl Request {
     /// Begin work with websocket.
     /// Makes handshake response to upgrade websocket request from browser.
     /// Returns object for work with websocket or error if no "Sec-WebSocket-Key" header in request.
+    /// In case of error does not make response.
     ///
     /// # Arguments
     /// * `payload` - extra raw data that will send together with handshake response. Must be prepared as frame(frames).
     pub fn accept_websocket(&mut self, extra_payload: Option<&[u8]>) -> Result<Websocket, WebsocketHandshakeError>
     {
-        let mut response =  websocket::handshake_response(&self.request_data)?;
+        let key = self.header_value("Sec-WebSocket-Key")
+            .ok_or(WebsocketHandshakeError::NoSecWebSocketKeyHeader)?;
+
+        let accept = websocket::accept_key(key)?;
+
+        let protocol = if let Some(protocol) = self.header_value("Sec-WebSocket-Protocol") {
+            format!("Sec-WebSocket-Protocol: {}\r\n", &protocol)
+        } else {
+            String::new()
+        };
+
+        let mut response =  Vec::from(format!(
+            "{} 101 Switching Protocols\r\n\
+            Upgrade: websocket\r\n\
+            Connection: Upgrade\r\n\
+            Sec-WebSocket-Accept: {}\r\n\
+            {}\
+            \r\n",
+            self.version().to_string_for_response(),
+            &accept,
+            &protocol
+        ));
+
         if let Some(extra_payload) = extra_payload {
             response.extend_from_slice(extra_payload);
         }
@@ -122,6 +145,7 @@ impl Request {
 
         Ok(Websocket::new(self.tcp_session.clone()))
     }
+
 
     /// Raw buffer of request.
     pub fn raw(&self) -> &[u8] {

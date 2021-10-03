@@ -1,4 +1,3 @@
-use crate::request::RequestData;
 use sha1::{Digest, Sha1};
 use crate::tcp_session::TcpSession;
 
@@ -67,38 +66,14 @@ pub enum WebsocketHandshakeError {
     NoSecWebSocketKeyHeader
 }
 
-/// Makes handshake response to upgrade websocket request from browser.
-/// Returns error if no "Sec-WebSocket-Key" header in request.
-pub fn handshake_response(request: &RequestData) -> Result<Vec<u8>, WebsocketHandshakeError> {
-    const MAGIC_STRING_FOR_HANDSHAKE: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-
-    let key = request.header_value("Sec-WebSocket-Key")
-        .ok_or(WebsocketHandshakeError::NoSecWebSocketKeyHeader)?;
-
+/// Returns hashed key for Sec-WebSocket-Accept header websocket handshake response
+/// by Sec-WebSocket-Key of upgrade websocket request.
+pub fn accept_key(sec_websocket_key: &str) -> Result<String, WebsocketHandshakeError> {
     let mut hasher = Sha1::new();
-    hasher.input((key.to_owned() + MAGIC_STRING_FOR_HANDSHAKE).as_bytes());
+    const MAGIC_STRING_FOR_HANDSHAKE: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    hasher.input((sec_websocket_key.to_owned() + MAGIC_STRING_FOR_HANDSHAKE).as_bytes());
     let accept_sha1 = hasher.result();
-    let accept = base64::encode(&accept_sha1);
-
-    let protocol = if let Some(protocol) = request.header_value("Sec-WebSocket-Protocol") {
-        format!("Sec-WebSocket-Protocol: {}\r\n", &protocol)
-    } else {
-        String::new()
-    };
-
-    let response = format!(
-        "{} 101 Switching Protocols\r\n\
-         Upgrade: websocket\r\n\
-         Connection: Upgrade\r\n\
-         Sec-WebSocket-Accept: {}\r\n\
-         {}\
-         \r\n",
-        request.version().to_string_for_response(),
-        &accept,
-        &protocol
-    );
-
-    return Ok(Vec::from(response));
+    Ok(base64::encode(&accept_sha1))
 }
 
 /// Make vector containing frame based on the specified opcode and payload data.
