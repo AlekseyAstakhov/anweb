@@ -2,7 +2,7 @@ use crate::cookie::{parse_cookie, CookieOfRequst};
 use crate::query::{parse_query, Query};
 use std::str::from_utf8;
 use crate::tcp_session::{ContentIsComplite, TcpSession};
-use crate::websocket::{Websocket, WebsocketHandshakeError};
+use crate::websocket::{Websocket, WebsocketHandshakeError, frame};
 use crate::websocket;
 use crate::response::Response;
 
@@ -122,7 +122,7 @@ impl Request {
     ///
     /// # Arguments
     /// * `payload` - extra raw data that will send together with handshake response. Must be prepared as frame(frames).
-    pub fn accept_websocket_and_send_extra_frames(&self, extra_payload: &[u8]) -> Result<Websocket, WebsocketHandshakeError>
+    pub fn accept_websocket_and_send_extra_frames(&self, extra_frames: &[(u8/*opcode*/, &[u8]/*payload*/)]) -> Result<Websocket, WebsocketHandshakeError>
     {
         let key = self.header_value("Sec-WebSocket-Key")
             .ok_or(WebsocketHandshakeError::NoSecWebSocketKeyHeader)?;
@@ -147,7 +147,9 @@ impl Request {
             &protocol
         ));
 
-        response.extend_from_slice(extra_payload);
+        for (opcode, payload) in extra_frames {
+            response.extend_from_slice(&frame(*opcode, payload));
+        }
 
         self.tcp_session.send(&response);
 

@@ -2,7 +2,7 @@ use anweb::redirect_server::run_redirect_server;
 use anweb::server;
 use anweb::server::Server;
 use anweb::tls::{load_certs, load_private_key};
-use anweb::websocket::{frame, Frame, TEXT_OPCODE, Websocket};
+use anweb::websocket::{Frame, TEXT_OPCODE, Websocket};
 use rustls::{NoClientAuth, ServerConfig};
 use std::collections::btree_map::BTreeMap;
 use std::str::from_utf8;
@@ -63,9 +63,9 @@ fn on_request(request: Request, chat: &Arc<Chat>) -> Result<(), Box<dyn std::err
         "/ws" => {
             if let Ok(messages) = chat.messages.lock() {
                 // Prepares full current chat that will send with response to handshake request.
-                let mut full_chat_frames = vec![];
+                let mut full_chat_frames = Vec::with_capacity(messages.len());
                 for msg in messages.iter() {
-                    full_chat_frames.extend(frame(TEXT_OPCODE, msg.as_bytes()));
+                    full_chat_frames.push((TEXT_OPCODE, msg.as_bytes()));
                 }
 
                 let cloned_chat = chat.clone();
