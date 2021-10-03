@@ -24,8 +24,6 @@ pub enum ParseState {
     Header(usize, usize),
 }
 
-const VERSION_LEN: usize = 8;
-
 /// Parser settings to be applied for new connections.
 #[derive(Debug, Clone)]
 pub struct ParseHttpRequestSettings {
@@ -45,8 +43,10 @@ pub struct ParseHttpRequestSettings {
     pub pipelining_requests_limit: u16,
 }
 
+const VERSION_LEN: usize = 8;
+
 impl Parser {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Parser {
             parse_state: ParseState::Method,
             request: RequestData::new(),
