@@ -232,7 +232,6 @@ pub fn test_request(port: u16, raw_request: &[u8], on_request: impl FnMut(Reques
     let server = Server::new(&([0, 0, 0, 0], port).into());
     assert!(server.is_ok());
     if let Ok(server) = server {
-        let num_threads = server.num_threads;
         let stopper = server.stopper();
         let raw_request = raw_request.to_vec();
         let server_run_res = server.run(move |server_event| {
@@ -281,9 +280,11 @@ pub fn test_request(port: u16, raw_request: &[u8], on_request: impl FnMut(Reques
                             on_response(&response);
 
                             stopper.stop();
-                            for _ in 0..num_threads {
-                                if let Ok(_) = TcpStream::connect(addr) {
+                            loop {
+                                if TcpStream::connect(addr).is_ok() {
                                     sleep(Duration::from_millis(1));
+                                } else {
+                                    break;
                                 }
                             }
                         }
