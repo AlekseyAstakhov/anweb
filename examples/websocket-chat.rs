@@ -69,7 +69,7 @@ fn on_request(request: Request, chat: &Arc<Chat>) -> Result<(), Box<dyn std::err
                 }
 
                 let cloned_chat = chat.clone();
-                let websocket = request.accept_websocket(Some(&full_chat_frames))?;
+                let websocket = request.accept_websocket_and_send_extra_frames(&full_chat_frames)?;
                 websocket.on_frame(move |received_frame, _| {
                     on_websocket_frame(received_frame?, &cloned_chat);
                     Ok(())

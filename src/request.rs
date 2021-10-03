@@ -110,10 +110,19 @@ impl Request {
     /// Makes handshake response to upgrade websocket request from browser.
     /// Returns object for work with websocket or error if no "Sec-WebSocket-Key" header in request.
     /// In case of error does not make response.
+    pub fn accept_websocket(&self) -> Result<Websocket, WebsocketHandshakeError>
+    {
+        self.accept_websocket_and_send_extra_frames(&[])
+    }
+
+    /// Begin work with websocket.
+    /// Makes handshake response to upgrade websocket request from browser.
+    /// Returns object for work with websocket or error if no "Sec-WebSocket-Key" header in request.
+    /// In case of error does not make response.
     ///
     /// # Arguments
     /// * `payload` - extra raw data that will send together with handshake response. Must be prepared as frame(frames).
-    pub fn accept_websocket(&self, extra_payload: Option<&[u8]>) -> Result<Websocket, WebsocketHandshakeError>
+    pub fn accept_websocket_and_send_extra_frames(&self, extra_payload: &[u8]) -> Result<Websocket, WebsocketHandshakeError>
     {
         let key = self.header_value("Sec-WebSocket-Key")
             .ok_or(WebsocketHandshakeError::NoSecWebSocketKeyHeader)?;
@@ -138,14 +147,12 @@ impl Request {
             &protocol
         ));
 
-        if let Some(extra_payload) = extra_payload {
-            response.extend_from_slice(extra_payload);
-        }
+        response.extend_from_slice(extra_payload);
+
         self.tcp_session.send(&response);
 
         Ok(Websocket::new(self.tcp_session.clone()))
     }
-
 
     /// Raw buffer of request.
     pub fn raw(&self) -> &[u8] {

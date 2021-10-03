@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     server.run(|server_event| {
         if let server::Event::Incoming(tcp_session) = server_event {
             tcp_session.to_http(|http_result| {
-                let mut request = http_result?;
+                let request = http_result?;
                 match request.path() {
                     "/" => {
                         request.response(200).html(INDEX_HTML).send();
@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "/ws" => {
                         // Try process websocket handshake request and switch connection
                         // to websocket mode, it will no longer process http requests.
-                        let websocket = request.accept_websocket(None)?;
+                        let websocket = request.accept_websocket()?;
                         websocket.on_frame(|websocket_result, websocket| {
                             // This callback will be called if a new frame arrives from the client
                             // or an error occurs.
