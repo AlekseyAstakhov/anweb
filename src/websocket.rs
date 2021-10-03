@@ -71,8 +71,8 @@ pub enum WebsocketHandshakeError {
 pub fn accept_key(sec_websocket_key: &str) -> Result<String, WebsocketHandshakeError> {
     let mut hasher = Sha1::new();
     const MAGIC_STRING_FOR_HANDSHAKE: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-    hasher.input((sec_websocket_key.to_owned() + MAGIC_STRING_FOR_HANDSHAKE).as_bytes());
-    let accept_sha1 = hasher.result();
+    hasher.update((sec_websocket_key.to_owned() + MAGIC_STRING_FOR_HANDSHAKE).as_bytes());
+    let accept_sha1 = hasher.finalize();
     Ok(base64::encode(&accept_sha1))
 }
 
