@@ -107,6 +107,9 @@ impl Request {
     }
 
     /// Begin work with websocket.
+    /// Makes handshake response to upgrade websocket request from browser.
+    /// Returns object for work with websocket or error if no "Sec-WebSocket-Key" header in request.
+    ///
     /// # Arguments
     /// * `payload` - extra raw data that will send together with handshake response. Must be prepared as frame(frames).
     pub fn accept_websocket(&mut self, extra_payload: Option<&[u8]>) -> Result<Websocket, WebsocketHandshakeError>

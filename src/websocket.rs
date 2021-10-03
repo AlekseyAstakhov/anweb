@@ -67,7 +67,8 @@ pub enum WebsocketHandshakeError {
     NoSecWebSocketKeyHeader
 }
 
-/// Generate response to upgrade connection request. Check only Sec-WebSocket-Key header of request!
+/// Makes handshake response to upgrade websocket request from browser.
+/// Returns error if no "Sec-WebSocket-Key" header in request.
 pub fn handshake_response(request: &RequestData) -> Result<Vec<u8>, WebsocketHandshakeError> {
     const MAGIC_STRING_FOR_HANDSHAKE: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
