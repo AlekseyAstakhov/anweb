@@ -113,7 +113,7 @@ impl Request {
     ///
     /// # Arguments
     /// * `payload` - extra raw data that will send together with handshake response. Must be prepared as frame(frames).
-    pub fn accept_websocket(&mut self, extra_payload: Option<&[u8]>) -> Result<Websocket, WebsocketHandshakeError>
+    pub fn accept_websocket(&self, extra_payload: Option<&[u8]>) -> Result<Websocket, WebsocketHandshakeError>
     {
         let key = self.header_value("Sec-WebSocket-Key")
             .ok_or(WebsocketHandshakeError::NoSecWebSocketKeyHeader)?;
