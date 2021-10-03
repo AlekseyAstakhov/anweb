@@ -1,5 +1,6 @@
 use anweb::cookie::Cookie;
 use anweb::server::{Event, Server};
+use anweb::request::Request;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = ([0, 0, 0, 0], 8080).into();
@@ -8,35 +9,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     server.run(move |server_event| {
         if let Event::Incoming(tcp_session) = server_event {
             tcp_session.to_http(move |http_result| {
-                let request = http_result?;
-                let cookie_name = "test";
-
-                // if cookie with "test" name are already installed on the client (browser)
-                if let Some(_) = request.cookies().iter().find(|cookie| cookie.name == cookie_name) {
-                    request.response(200).html(HTML_WHEN_COOKIE_RECEIVED).send();
-                } else {
-                    let cookie = Cookie {
-                        name: "test",
-                        value: "abc",
-                        path: None,
-                        domain: None,
-                        http_only: true,
-                        expires: None,
-                        max_age: None,
-                        secure: false,
-                    }.to_string();
-
-                    // if cookies are not installed, then install it
-                    request.response(200)
-                        .cookies(&cookie)
-                        .html(HTML_WHEN_NO_COOKIE)
-                        .send();
-                }
-
-                Ok(())
+                on_request(http_result?)
             });
         }
     })?;
+
+    Ok(())
+}
+
+fn on_request(request: Request) -> Result<(), Box<dyn std::error::Error>> {
+    let cookie_name = "test";
+
+    // if cookie with "test" name are already installed on the client (browser)
+    if let Some(_) = request.cookies().iter().find(|cookie| cookie.name == cookie_name) {
+        request.response(200).html(HTML_WHEN_COOKIE_RECEIVED).send();
+    } else {
+        let cookie = Cookie {
+            name: "test",
+            value: "abc",
+            path: None,
+            domain: None,
+            http_only: true,
+            expires: None,
+            max_age: None,
+            secure: false,
+        }.to_string();
+
+        // if cookies are not installed, then install it
+        request.response(200)
+            .cookies(&cookie)
+            .html(HTML_WHEN_NO_COOKIE)
+            .send();
+    }
 
     Ok(())
 }
