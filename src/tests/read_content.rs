@@ -19,7 +19,7 @@ fn empty() {
             request.read_content(move |data, complete| {
                 content.extend_from_slice(data);
                 if let Some(request) = complete {
-                    assert_eq!(&content, b"");
+                    assert_eq!(&content, &[]);
                     request.response(200).close().send();
                 }
                 Ok(())
@@ -54,7 +54,7 @@ fn empty() {
             request.read_content(move |data, complete| {
                 content.extend_from_slice(data);
                 if let Some(request) = complete {
-                    assert_eq!(&content, b"");
+                    assert_eq!(&content, &[]);
                     request.response(200).close().send();
                 }
                 Ok(())

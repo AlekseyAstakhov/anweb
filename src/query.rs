@@ -66,13 +66,13 @@ pub fn parse_query(query: &[u8]) -> Query {
         if *ch == b'&' || *ch == b';' {
             let name = &query[token_index..i];
             if !name.is_empty() {
-                result.push(QueryNameValue { name, value: b"" });
+                result.push(QueryNameValue { name, value: &[] });
             }
             token_index = i + 1;
         } else if i == query_len - 1 {
             let name = &query[token_index..=i];
             if !name.is_empty() {
-                result.push(QueryNameValue { name, value: b"" });
+                result.push(QueryNameValue { name, value: &[] });
             }
             token_index = i;
         }

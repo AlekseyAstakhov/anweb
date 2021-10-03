@@ -125,7 +125,7 @@ impl WebSession {
                 if let Some((content_callback, request)) = content_callback {
                     if content_len == 0 {
                         let request = request.take();
-                        if content_callback(b"", request).is_err() {
+                        if content_callback(&[], request).is_err() {
                             self.tcp_session.close();
                             return;
                         }

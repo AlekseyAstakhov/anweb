@@ -77,7 +77,7 @@ impl Request {
         let tcp_session = self.tcp_session.clone();
 
         if self.content_len() == 0 {
-            if callback(b"", Some(self)).is_err() {
+            if callback(&[], Some(self)).is_err() {
                 tcp_session.close();
             }
             return;
@@ -375,7 +375,7 @@ impl RequestData {
     pub fn raw_method(&self) -> &[u8] {
         if self.method_end_index > self.raw.len() {
             // this code must be unreachable
-            return b"";
+            return &[];
         }
 
         &self.raw[0..self.method_end_index]
@@ -385,7 +385,7 @@ impl RequestData {
     pub fn raw_path(&self) -> &[u8] {
         if self.path_indices.0 > self.path_indices.1 || self.path_indices.1 > self.raw.len() {
             // this code must be unreachable
-            return b"";
+            return &[];
         }
 
         &self.raw[self.path_indices.0..self.path_indices.1]
@@ -395,7 +395,7 @@ impl RequestData {
     pub fn raw_query(&self) -> &[u8] {
         if self.raw_query_indices.0 > self.raw_query_indices.1 || self.raw_query_indices.1 > self.raw.len() {
             // this code must be unreachable
-            return b"";
+            return &[];
         }
 
         &self.raw[self.raw_query_indices.0..self.raw_query_indices.1]

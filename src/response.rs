@@ -148,7 +148,7 @@ impl<'a, 'b, 'c, 'd, 'e> Response<'a, 'b, 'c, 'd, 'e> {
     pub(crate) fn new(code: u16, request: Request) -> Self {
         Response {
             code,
-            content: b"",
+            content: &[],
             content_type: "",
             keep_alive_connection: None,
             headers: None,
