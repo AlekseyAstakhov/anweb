@@ -12,7 +12,7 @@ sha-1 = "0.9.8"
 base64 = "0.13.0"
 rustls = "0.19.1"
 percent-encoding = "2.1.0"
-deflate = { version = "0.8.3", features = ["gzip"] }
+deflate = { version = "0.9.1", features = ["gzip"] }
 chrono = "0.4.19"
 md5 = "0.7.0"
 
