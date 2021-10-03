@@ -43,21 +43,19 @@ fn response_for_unlogged_user(request: Request, users: &Users) -> Result<(), Htt
             request.response(200).html(LOGIN_PAGE).send();
         }
         "/login" => {
-            if let Some(content_len) = request.content_len() {
-                if content_len < 256 {
-                    let users = users.clone();
-                    let mut content = vec![];
-                    request.read_content(move |data, complete| {
-                        content.extend_from_slice(data);
-                        if let Some(request) = complete {
-                            let form = parse_query(&content);
-                            response_to_login_form(request, &form, &users);
-                        }
-                        Ok(())
-                    })
-                } else {
-                    request.response(400).text("A lot of data for login and password. Bye bye.").close().send();
-                }
+            if request.content_len() < 256 {
+                let users = users.clone();
+                let mut content = vec![];
+                request.read_content(move |data, complete| {
+                    content.extend_from_slice(data);
+                    if let Some(request) = complete {
+                        let form = parse_query(&content);
+                        response_to_login_form(request, &form, &users);
+                    }
+                    Ok(())
+                })
+            } else {
+                request.response(400).text("A lot of data for login and password. Bye bye.").close().send();
             }
         }
         _ => {
