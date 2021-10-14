@@ -71,19 +71,22 @@ impl MultipartParser {
                     break; // need more data
                 }
                 ParseState::Disposition => {
-                    if let Some(pos) = self.buf.windows(4).position(|win| win == b"\r\n\r\n") {
-                        let raw_disposition = &self.buf[0..pos];
-                        f(MultipartParserEvent::Disposition(&Disposition { raw: raw_disposition }));
-                        self.buf = Vec::from(&self.buf[pos + 4..]);
-                        self.state = ParseState::ReadData;
-                        continue;
+                    if self.buf.len() > 4 {
+                        if let Some(pos) = self.buf.windows(4).position(|win| win == b"\r\n\r\n") {
+                            let left = if &self.buf[0..2] != b"\r\n" { 0 } else { 2 };
+                            let raw_disposition = &self.buf[left..pos];
+                            f(MultipartParserEvent::Disposition(&Disposition { raw: raw_disposition }));
+                            self.buf = Vec::from(&self.buf[pos + 4..]);
+                            self.state = ParseState::ReadData;
+                            continue;
+                        }
                     }
 
                     break; // need more data
                 }
                 ParseState::ReadData => {
                     if let Some((boundary_pos, closing_boundary)) = self.find_boundary(&self.buf) {
-                        let data_part = &self.buf[..boundary_pos - 4];
+                        let data_part = &self.buf[..boundary_pos - 2]; // checked in find_boundary
                         if !data_part.is_empty() {
                             f(MultipartParserEvent::Data { data_part, end: true });
                         }
