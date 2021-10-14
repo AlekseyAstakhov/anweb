@@ -49,7 +49,7 @@ impl MultipartParser {
                     // ignore anything that appears before the first boundary or after the last one.
                     // (RFC 2046)
 
-                    if let Some((boundary_pos, closing_boundary)) = self.find_boundary(&self.buf) {
+                    if let Some((boundary_pos, closing_boundary)) = find_boundary(&self.buf, &self.boundary) {
                         self.state = ParseState::Disposition;
 
                         if closing_boundary {
@@ -85,8 +85,8 @@ impl MultipartParser {
                     break; // need more data
                 }
                 ParseState::ReadData => {
-                    if let Some((boundary_pos, closing_boundary)) = self.find_boundary(&self.buf) {
-                        let data_part = &self.buf[..boundary_pos - 2]; // checked in find_boundary
+                    if let Some((boundary_pos, closing_boundary)) = find_boundary(&self.buf, &self.boundary) {
+                        let data_part = &self.buf[..boundary_pos - 2]; // checked in find_boundary function
                         if !data_part.is_empty() {
                             f(MultipartParserEvent::Data { data_part, end: true });
                         }
@@ -113,27 +113,27 @@ impl MultipartParser {
 
         Ok(())
     }
+}
 
-    fn find_boundary(&self, buf: &[u8]) -> Option<(usize, bool/*closing boundary*/)> {
-        if buf.len() >= self.boundary.len() + 4 {
-            if let Some(pos) = buf.windows(2).position(|win| win == b"--") {
-                let boundary_pos = pos + 2;
-                if boundary_pos + self.boundary.len() + 2 < buf.len() {
-                    if &buf[boundary_pos..boundary_pos + self.boundary.len()] == self.boundary {
-                        if &buf[boundary_pos + self.boundary.len()..boundary_pos + self.boundary.len() + 2] == b"\r\n" {
-                            // --BOUNDARY\r\n
-                            return Some((boundary_pos, false));
-                        } else if &buf[boundary_pos + self.boundary.len()..boundary_pos + self.boundary.len() + 2] == b"--" {
-                            // --BOUNDARY--
-                            return Some((boundary_pos, true));
-                        }
+fn find_boundary(buf: &[u8], boundary: &[u8]) -> Option<(usize, bool/*closing boundary*/)> {
+    if buf.len() >= boundary.len() + 4 {
+        if let Some(pos) = buf.windows(2).position(|win| win == b"--") {
+            let boundary_pos = pos + 2;
+            if boundary_pos + boundary.len() + 2 < buf.len() {
+                if &buf[boundary_pos..boundary_pos + boundary.len()] == boundary {
+                    if &buf[boundary_pos + boundary.len()..boundary_pos + boundary.len() + 2] == b"\r\n" {
+                        // --BOUNDARY\r\n
+                        return Some((boundary_pos, false));
+                    } else if &buf[boundary_pos + boundary.len()..boundary_pos + boundary.len() + 2] == b"--" {
+                        // --BOUNDARY--
+                        return Some((boundary_pos, true));
                     }
                 }
             }
         }
-
-        None
     }
+
+    None
 }
 
 /// Disposition of multipart part.
