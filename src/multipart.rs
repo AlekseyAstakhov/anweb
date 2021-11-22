@@ -119,7 +119,7 @@ fn find_boundary(buf: &[u8], boundary: &[u8]) -> Option<(usize, bool/*closing bo
     if buf.len() >= boundary.len() + 4 {
         if let Some(pos) = buf.windows(2).position(|win| win == b"--") {
             let boundary_pos = pos + 2;
-            if boundary_pos + boundary.len() + 2 < buf.len() {
+            if buf.len() >= boundary_pos + boundary.len() + 2 {
                 if &buf[boundary_pos..boundary_pos + boundary.len()] == boundary {
                     if &buf[boundary_pos + boundary.len()..boundary_pos + boundary.len() + 2] == b"\r\n" {
                         // --BOUNDARY\r\n
