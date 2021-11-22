@@ -120,8 +120,6 @@ fn small_content() {
 
 #[test]
 fn big_content() {
-    dbg!();
-
     const LEN: usize = 10000000;
     let mut origin_content = Vec::with_capacity(LEN);
     for i in 0..LEN {
