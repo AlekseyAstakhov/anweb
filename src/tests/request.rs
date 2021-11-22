@@ -253,7 +253,7 @@ pub fn test_request(port: u16, raw_request: &[u8], on_request: impl FnMut(Reques
                         let tcp_stream = TcpStream::connect(addr);
                         assert!(tcp_stream.is_ok());
                         if let Ok(mut tcp_stream) = tcp_stream {
-                            let res = tcp_stream.set_write_timeout(Some(Duration::from_millis(8)));
+                            let res = tcp_stream.set_write_timeout(Some(Duration::from_millis(64)));
                             assert!(res.is_ok());
                             let res = tcp_stream.write_all(&raw_request);
                             assert!(res.is_ok());
