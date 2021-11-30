@@ -1,5 +1,5 @@
 use anweb::server::{Event, Server};
-use anweb::static_files::StaticFiles;
+use anweb::static_files::StaticFilesCache;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The data of all files in the dir will be loaded into RAM
@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // All changes to the directory will update the content in RAM.
     // This also handles the browser cache.
     // For advanced settings see: 'static_files::Builder'
-    let static_files = StaticFiles::new(current_src_dir_path());
+    let static_files = StaticFilesCache::new(current_src_dir_path());
 
     let addr = ([0, 0, 0, 0], 8080).into();
 

@@ -22,11 +22,11 @@ use crate::response::need_close_by_request;
 /// Can't long time blocking operations when update cache.
 /// For manually settings some parameters see 'Builder'.
 #[derive(Clone)]
-pub struct StaticFiles {
+pub struct StaticFilesCache {
     /// Path to directory that will be cached in the RAM.
     dir_path: String,
     /// Cached files data in the RAM and related information.
-    cached_files: Arc<RwLock<BTreeMap<String, StaticFile>>>,
+    cached_files: Arc<RwLock<BTreeMap<String, StaticFileCache>>>,
 
     /// Need cache data as deflate compressed.
     deflate_encoding: bool,
@@ -43,7 +43,7 @@ pub struct StaticFiles {
 
 /// Cached file data and related information in the the RAM.
 #[derive(Clone)]
-pub struct StaticFile {
+pub struct StaticFileCache {
     /// Raw file data.
     raw_data: Arc<Vec<u8>>,
     /// File data as deflate compressed.
@@ -62,17 +62,17 @@ pub struct StaticFile {
     etag: String,
 }
 
-impl StaticFiles {
+impl StaticFilesCache {
     /// Creates new dynamic cache in RAM of files on disk in `path` directory.
     pub fn new(path: &str) -> Self {
-        StaticFiles::from_builder(path, &Builder::default())
+        StaticFilesCache::from_builder(path, &Builder::default())
     }
 
     /// Creates new `Self` with parameters specified in builder.
     pub fn from_builder(path: &str, builder: &Builder) -> Self {
         let cached_files = Arc::new(RwLock::new(BTreeMap::new()));
 
-        let static_files = StaticFiles {
+        let static_files = StaticFilesCache {
             dir_path: path.to_string(),
             cached_files,
             deflate_encoding: builder.deflate_encoding,
@@ -264,7 +264,7 @@ impl StaticFiles {
     }
 
     /// Get static file data from cache by path. Callback under read blocking of RwLock of files container.
-    fn get(&self, file_path: &str, mut result_callback: impl FnMut(Option<&StaticFile>)) {
+    fn get(&self, file_path: &str, mut result_callback: impl FnMut(Option<&StaticFileCache>)) {
         let file_name = if file_path.starts_with('/') { &file_path[1..] } else { file_path };
 
         if let Ok(cached_files) = self.cached_files.read() {
@@ -350,7 +350,7 @@ impl StaticFiles {
 
                 let etag = if self.use_etag { format!("{:x}", md5::compute(&raw_data)) } else { "".to_string() };
 
-                let cached_file = StaticFile {
+                let cached_file = StaticFileCache {
                     raw_data: Arc::new(raw_data),
                     deflate_data,
                     gzip_data,
@@ -420,8 +420,8 @@ impl Builder {
     }
 
     /// Creates `StaticFiles` from builder. `path` - path to directory on disk that will be cached.
-    pub fn build(&self, path: &str) -> StaticFiles {
-        StaticFiles::from_builder(path, &self)
+    pub fn build(&self, path: &str) -> StaticFilesCache {
+        StaticFilesCache::from_builder(path, &self)
     }
 
     /// Interval of scanning directory and cache updating in background thread.
