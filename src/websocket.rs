@@ -1,3 +1,55 @@
+// Websocket frame (RFC 6455):
+//
+// 0                   1                   2                   3
+// 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+// +-+-+-+-+-------+-+-------------+-------------------------------+
+// |F|R|R|R| opcode|M| Payload len |    Extended payload length    |
+// |I|S|S|S|  (4)  |A|     (7)     |             (16/64)           |
+// |N|V|V|V|       |S|             |   (if payload len==126/127)   |
+// | |1|2|3|       |K|             |                               |
+// +-+-+-+-+-------+-+-------------+ - - - - - - - - - - - - - - - +
+// |     Extended payload length continued, if payload len == 127  |
+// + - - - - - - - - - - - - - - - +-------------------------------+
+// |                               |Masking-key, if MASK set to 1  |
+// +-------------------------------+-------------------------------+
+// | Masking-key (continued)       |          Payload Data         |
+// +-------------------------------- - - - - - - - - - - - - - - - +
+// :                     Payload Data continued ...                :
+// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+// |                     Payload Data continued ...                |
+// +---------------------------------------------------------------+
+//
+// FIN:  1 bit
+// Indicates that this is the final fragment in a message.  The first
+// fragment MAY also be the final fragment.
+//
+// RSV1, RSV2, RSV3:  1 bit each
+// MUST be 0 unless an extension is negotiated that defines meanings
+// for non-zero values.  If a nonzero value is received and none of
+// the negotiated extensions defines the meaning of such a nonzero
+// value, the receiving endpoint MUST _Fail the WebSocket
+// Connection_.
+//
+// Opcode:  4 bits
+// Defines the interpretation of the "Payload data".  If an unknown
+// opcode is received, the receiving endpoint MUST _Fail the
+// WebSocket Connection_.  The following values are defined.
+//
+// *  %x0 denotes a continuation frame
+// *  %x1 denotes a text frame
+// *  %x2 denotes a binary frame
+// *  %x3-7 are reserved for further non-control frames
+// *  %x8 denotes a connection close
+// *  %x9 denotes a ping
+// *  %xA denotes a pong
+// *  %xB-F are reserved for further control frames
+//
+// Mask:  1 bit
+// Defines whether the "Payload data" is masked.  If set to 1, a
+// masking key is present in masking-key, and this is used to unmask
+// the "Payload data".  All frames sent from
+// client to server have this bit set to 1.
+
 use sha1::{Digest, Sha1};
 use crate::tcp_session::TcpSession;
 
