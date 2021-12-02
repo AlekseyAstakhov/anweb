@@ -18,8 +18,8 @@ To implement minimal sufficient functionality for developing secure, high-perfor
 
         server.run(|server_event| {
             if let Event::Incoming(tcp_session) = server_event {
-            tcp_session.to_http(|request| {
-                request?.response(200).text("Hello world!").send();
+                tcp_session.to_http(|request| {
+                    request?.response(200).text("Hello world!").send();
                     Ok(())
                 });
             }
