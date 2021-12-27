@@ -18,8 +18,13 @@ To implement minimal sufficient functionality for developing secure, high-perfor
 
         server.run(|server_event| {
             if let Event::Incoming(tcp_session) = server_event {
-                tcp_session.to_http(|request| {
-                    request?.response(200).text("Hello world!").send();
+                tcp_session.to_http(|http_res| {
+                    let request = http_res?;
+                    if request.path() == "/" && request.method() == "GET" {
+                        request.response(200).text("Hello world!").send();
+                    } else {
+                        request.response(404).text("404 not found").send();
+                    }
                     Ok(())
                 });
             }
@@ -47,11 +52,11 @@ abweb (v0.0.1):
     Running 30s test @ http://127.0.0.1:8080/
       4 threads and 400 connections
       Thread Stats   Avg      Stdev     Max   +/- Stdev
-        Latency     2.37ms    2.39ms  27.52ms   88.59%
-        Req/Sec    44.96k    13.45k   76.92k    58.19%
-      5370013 requests in 30.10s, 783.55MB read
-    Requests/sec: 178403.86
-    Transfer/sec:     26.03MB
+        Latency     2.11ms    1.70ms  28.92ms   78.88%
+        Req/Sec    44.59k    12.54k   75.30k    61.29%
+      5325684 requests in 30.09s, 777.08MB read
+    Requests/sec: 177001.63
+    Transfer/sec:     25.83MB
 
 actix-web (v3.3.2):
 
